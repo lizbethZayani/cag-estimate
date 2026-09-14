@@ -1,0 +1,22 @@
+[project]
+name = "cag-estimate"
+version = "0.1.0"
+description = "Context-Augmented Generation for Project Estimation"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.35.0",
+    "fastapi[standard]>=0.141.1",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.0.0",
+    "requests>=2.31.0",
+    "uvicorn[standard]>=0.53.0",
+]
+
+[project.scripts]
+cag-estimate = "cag_estimate:main"
+
+[build-system]
+requires = ["uv_build>=0.12.7,<0.13.0"]
+build-backend = "uv_build"
+
