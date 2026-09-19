@@ -1,0 +1,23 @@
+# Development overrides for docker-compose.yml
+# This file is automatically loaded by docker-compose and provides development-specific settings
+
+version: '3.9'
+
+services:
+  api:
+    # Use development environment settings
+    environment:
+      - APP_ENV=development
+      - LOG_LEVEL=DEBUG
+
+    # Mount source code for hot reload
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+
+    # Use development command with reload
+    command: uvicorn cag_estimate.main:app --host 0.0.0.0 --port 8000 --reload
+
+    # Additional development tools
+    stdin_open: true
+    tty: true
