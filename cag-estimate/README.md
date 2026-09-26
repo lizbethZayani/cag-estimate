@@ -1,6 +1,6 @@
-# CAG Estimate API
+# CAG Estimate
 
-**Context-Augmented Generation for Project Estimation** - An intelligent API that generates detailed project estimations based on meeting transcriptions using Anthropic's Claude AI.
+**Context-Augmented Generation for Project Estimation** - An intelligent API and a real-time Streamlit chat UI that generate detailed project estimations from meeting transcriptions using Anthropic's Claude AI.
 
 ## Overview
 
@@ -11,6 +11,10 @@ CAG Estimate uses the **Context-Augmented Generation (CAG)** architecture patter
 - Team size recommendations
 - Project timeline estimates
 - Key assumptions and dependencies
+
+The project ships with two ways to use it:
+- **FastAPI backend** (`/api/v1/estimate`, `/api/v1/estimate/stream`) — see [API Documentation](#api-documentation)
+- **Streamlit chat UI** (`src/ui/streamlit_app.py`) — a conversational interface with real-time, token-by-token streaming; see [💬 Streamlit Chat Interface](#-streamlit-chat-interface)
 
 ## 📦 Complete Setup Summary
 
@@ -45,7 +49,14 @@ Context-Augmented Generation endpoint that:
 - `/docs` - Interactive Swagger UI
 - `/redoc` - ReDoc documentation
 
-#### 6. **Verification Pipeline** ✅ *NEW*
+#### 6. **Streamlit Chat Interface** - `src/ui/streamlit_app.py`
+A conversational, chat-app-style frontend for the estimation API:
+- WhatsApp/iMessage-style bubbles: your messages on the right (sky blue), assistant replies on the left (gray)
+- True real-time, token-by-token streaming — the LLM is prompted to respond in Markdown directly (not JSON), so every token can be shown to the user the instant it's generated
+- "🤖 Thinking" animated indicator while waiting for the first token
+- Sidebar dashboard: New Chat, Conversation Stats, Session Metrics (calls/tokens/cost), How to Use, and the CAG reference examples used as context
+
+#### 7. **Verification Pipeline** ✅ *NEW*
 Five-stage validation for manager confidence:
 1. **Schema Validation** - Correct JSON structure
 2. **Business Logic** - Mathematical accuracy (±15% tolerance)
@@ -81,6 +92,17 @@ curl -X POST http://127.0.0.1:8001/api/v1/estimate \
 ```bash
 .venv/bin/python tests/verify_api.py
 ```
+
+**5. Launch the Streamlit Chat UI:**
+
+The UI's `API_BASE_URL` is hardcoded to `http://localhost:8000`, so make sure the API is reachable there first (e.g. `docker-compose up`, or `uvicorn cag_estimate.main:app --host 0.0.0.0 --port 8000`) — not the `8001` dev port used in step 1 above.
+
+```bash
+./run_streamlit.sh
+# or manually:
+.venv/bin/python -m streamlit run src/ui/streamlit_app.py
+```
+Then open http://localhost:8501 and chat with the estimation assistant in real time.
 
 ### 📊 Real Example: Grocery Price Comparison App (iOS)
 
@@ -132,10 +154,13 @@ API Cost: $0.000060 (less than a penny!)
 | `http://127.0.0.1:8001/docs` | **Swagger UI** (interactive) |
 | `http://127.0.0.1:8001/redoc` | ReDoc documentation |
 | `http://127.0.0.1:8001/openapi.json` | OpenAPI schema |
+| `http://localhost:8501` | **Streamlit Chat UI** (real-time chat) |
+| `http://localhost:8000/api/v1/estimate/stream` | SSE streaming endpoint used by the chat UI |
 
 ### ✨ Key Features
 
 ✅ **Context-Augmented Generation** - LLM uses reference examples for consistent, high-quality estimations  
+✅ **Real-Time Streaming Chat UI** - Token-by-token responses in a WhatsApp-style Streamlit interface  
 ✅ **Automated Verification Pipeline** - Managers validate estimates with confidence scores  
 ✅ **Cost Transparent** - See exact token costs for every request  
 ✅ **Fast Results** - 3-5 seconds per estimation  
@@ -148,16 +173,24 @@ API Cost: $0.000060 (less than a penny!)
 
 ```
 cag-estimate/
-├── src/cag_estimate/
-│   ├── __init__.py
-│   ├── config.py                        # Pydantic BaseSettings
-│   ├── main.py                          # FastAPI app setup
-│   ├── routers/estimations.py           # /api/v1/estimate endpoint
-│   ├── services/llm_service.py          # LLM integration with CAG
-│   └── context/examples.py              # Reference estimation examples
+├── src/
+│   ├── cag_estimate/
+│   │   ├── __init__.py
+│   │   ├── config.py                    # Pydantic BaseSettings
+│   │   ├── main.py                      # FastAPI app setup
+│   │   ├── routers/estimations.py       # /api/v1/estimate + /estimate/stream
+│   │   ├── services/llm_service.py      # LLM integration with CAG
+│   │   └── context/examples.py          # Reference estimation examples
+│   └── ui/
+│       └── streamlit_app.py             # Real-time streaming chat UI
 ├── tests/
 │   ├── test_verification.py             # Verification pipeline tests
 │   └── verify_api.py                    # API integration tests
+├── .streamlit/config.toml               # Streamlit UI configuration
+├── run_streamlit.sh                     # Launches the chat UI
+├── Dockerfile                           # API container image
+├── docker-compose.yml                   # API service (port 8000)
+├── docker-compose.override.yml          # Dev overrides (hot-reload)
 ├── README.md                            # This file
 ├── VERIFICATION.md                      # Verification pipeline guide
 ├── .env                                 # Environment variables (local)
@@ -213,6 +246,55 @@ cag-estimate/
 │ └─ Assumptions                                          │
 └─────────────────────────────────────────────────────────┘
 ```
+
+## 💬 Streamlit Chat Interface
+
+A conversational frontend, located at [`src/ui/streamlit_app.py`](src/ui/streamlit_app.py), that talks to the FastAPI backend and streams the assistant's response live — no more waiting for a spinner and then seeing the whole answer appear at once.
+
+### How it works
+
+```
+User types a message
+        ↓
+Sky-blue bubble appears on the right, instantly
+        ↓
+"🤖 Thinking …" bubble appears on the left (animated dots)
+        ↓
+POST /api/v1/estimate/stream (Server-Sent Events)
+        ↓
+Model streams Markdown directly (not JSON) — each token is
+already human-readable, so it can be shown the instant it arrives
+        ↓
+"Thinking" bubble is replaced, live, by the growing response text
+        ↓
+On completion: API metrics (tokens · cost) appended, sidebar updated
+```
+
+**Why Markdown instead of JSON for streaming?** The `/api/v1/estimate` endpoint (used for programmatic/API access) still returns structured JSON. But `/api/v1/estimate/stream` uses a different system prompt (`build_system_prompt(output_format="markdown")` in `routers/estimations.py`) that asks the model to respond directly in readable Markdown. This means the raw tokens streamed from Claude can be displayed to the user immediately, with no buffering or reformatting — true token-by-token real-time output, not a replay after the fact.
+
+### Features
+
+- **Real chat bubbles** — user messages on the right (sky blue), assistant replies on the left (light gray), like WhatsApp/iMessage
+- **True real-time streaming** — placeholder + delta pattern re-renders the bubble on every token as it's generated
+- **"Thinking" indicator** — animated dots shown the instant you hit send, replaced the moment the first token streams in
+- **Auto-clearing input** — `st.chat_input()` clears itself after every message, so you can keep chatting
+- **Sidebar dashboard** (in this order): New Chat button → Conversation Stats → Session Metrics (calls, tokens, cost, last call info) → How to Use → CAG reference examples used as context
+- **XSS-safe rendering** — all message content is HTML-escaped before being converted from the small Markdown subset we use (bold, bullets, line breaks) into HTML, since bubbles are rendered with `unsafe_allow_html=True`
+
+### Running it
+
+```bash
+# 1. Start the API first (the UI expects it at http://localhost:8000)
+docker-compose up
+# or: uvicorn cag_estimate.main:app --host 0.0.0.0 --port 8000
+
+# 2. Start the chat UI
+./run_streamlit.sh
+# or manually:
+.venv/bin/python -m streamlit run src/ui/streamlit_app.py
+```
+
+Open **http://localhost:8501** in your browser.
 
 ## Getting Started
 
@@ -406,19 +488,23 @@ def test_estimation_response_validation():
 
 ```
 cag-estimate/
-├── src/cag_estimate/
-│   ├── __init__.py
-│   ├── main.py                    # FastAPI app setup
-│   ├── config.py                  # Configuration (Pydantic BaseSettings)
-│   ├── routers/
-│   │   └── estimations.py        # Estimation endpoints
-│   ├── services/
-│   │   └── llm_service.py        # LLM integration
-│   └── context/
-│       └── examples.py            # Reference estimation examples
+├── src/
+│   ├── cag_estimate/
+│   │   ├── __init__.py
+│   │   ├── main.py                # FastAPI app setup
+│   │   ├── config.py              # Configuration (Pydantic BaseSettings)
+│   │   ├── routers/
+│   │   │   └── estimations.py    # Estimation endpoints (JSON + SSE stream)
+│   │   ├── services/
+│   │   │   └── llm_service.py    # LLM integration
+│   │   └── context/
+│   │       └── examples.py        # Reference estimation examples
+│   └── ui/
+│       └── streamlit_app.py       # Streamlit chat UI (real-time streaming)
 ├── tests/
 │   ├── test_verification.py       # Verification pipeline tests
 │   └── test_endpoints.py          # API endpoint tests
+├── run_streamlit.sh                # Launches the chat UI
 ├── .env                           # Environment variables (local)
 ├── .env.example                   # Environment template
 ├── pyproject.toml                 # Project configuration
@@ -452,6 +538,7 @@ cag-estimate/
 ✅ **Cost Analysis** - Provides both LLM API costs and project costs  
 ✅ **Assumption Tracking** - Documents key assumptions made during estimation  
 ✅ **Interactive Documentation** - Swagger UI for easy testing  
+✅ **Streaming Chat UI** - Real-time, token-by-token chat interface built with Streamlit  
 ✅ **Production Ready** - CORS enabled, error handling, logging  
 
 ## Development

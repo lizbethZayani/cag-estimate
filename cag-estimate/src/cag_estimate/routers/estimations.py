@@ -5,19 +5,13 @@ Routers for project estimation endpoints.
 from typing import Optional
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 import json
-import anthropic
 
-from cag_estimate.config import get_settings
 from cag_estimate.context.examples import ESTIMATION_EXAMPLES
+from cag_estimate.services.llm_wrapper import get_llm_wrapper
 
 router = APIRouter(prefix="/api/v1", tags=["estimations"])
-
-# Token pricing for Claude 3.5 Sonnet (per 1M tokens)
-TOKEN_PRICES = {
-    "input": 0.003,      # $3 per 1M input tokens
-    "output": 0.015,     # $15 per 1M output tokens
-}
 
 
 class EstimationRequest(BaseModel):
@@ -75,32 +69,16 @@ class EstimationResponse(BaseModel):
     )
 
 
-def calculate_token_cost(input_tokens: int, output_tokens: int) -> dict:
-    """
-    Calculate the cost of tokens used.
-
-    Args:
-        input_tokens: Number of input tokens
-        output_tokens: Number of output tokens
-
-    Returns:
-        Dictionary with cost breakdown
-    """
-    input_cost = (input_tokens / 1_000_000) * TOKEN_PRICES["input"]
-    output_cost = (output_tokens / 1_000_000) * TOKEN_PRICES["output"]
-    total_cost = input_cost + output_cost
-
-    return {
-        "input_cost_usd": round(input_cost, 6),
-        "output_cost_usd": round(output_cost, 6),
-        "total_cost_usd": round(total_cost, 6),
-    }
-
-
-def build_system_prompt() -> str:
+def build_system_prompt(output_format: str = "json") -> str:
     """
     Build the system prompt with role definition and context examples.
     Core of the CAG architecture where context drives the calls.
+
+    Args:
+        output_format: "json" for the structured /estimate endpoint, or
+            "markdown" for the /estimate/stream endpoint, where the raw
+            generated tokens are displayed to the user in real time, so
+            they must already be human-readable instead of raw JSON.
     """
     examples_context = json.dumps(ESTIMATION_EXAMPLES, indent=2)
 
@@ -125,14 +103,46 @@ ESTIMATION GUIDELINES:
 - Include testing, documentation, and deployment tasks
 - Add 15-20% buffer for integration and unforeseen issues
 - Provide detailed task descriptions with included work items
+"""
 
+    if output_format == "markdown":
+        system_prompt += """
+OUTPUT FORMAT:
+Respond directly in this Markdown format. Do NOT use JSON and do NOT wrap the
+response in code fences — this text is streamed straight to the user as-is:
+
+**Project:** <project name>
+
+**Summary:**
+- **Total Hours:** <number>
+- **Total Cost:** $<number>
+- **Team Size:** <e.g. "2 developers">
+- **Duration:** <number> weeks
+- **Hourly Rate:** $<number>/hour
+
+**Meeting Summary:**
+<concise summary of the meeting>
+
+**Tasks Breakdown:**
+1. **<task name>** (<Simple|Medium|High>)
+   - Hours: <number> | Cost: $<number>
+2. **<task name>** (<Simple|Medium|High>)
+   - Hours: <number> | Cost: $<number>
+
+**Key Assumptions:**
+- <assumption 1>
+- <assumption 2>
+
+Be thorough but realistic in your estimations. Use the provided examples as benchmarks."""
+    else:
+        system_prompt += """
 OUTPUT FORMAT:
 Return a JSON object with this structure:
-{{
+{
     "project_name": "string",
     "meeting_summary": "string (concise summary of meeting)",
     "tasks": [
-        {{
+        {
             "task_id": number,
             "name": "string",
             "description": "string",
@@ -140,17 +150,17 @@ Return a JSON object with this structure:
             "estimated_cost_usd": number,
             "complexity": "Simple|Medium|High",
             "includes": ["list", "of", "deliverables"]
-        }}
+        }
     ],
-    "summary": {{
+    "summary": {
         "total_hours": number,
         "total_cost_usd": number,
         "team_size": "string (e.g., '2 developers')",
         "estimated_duration_weeks": number,
         "hourly_rate": number,
         "assumptions": ["list", "of", "key", "assumptions"]
-    }}
-}}
+    }
+}
 
 Be thorough but realistic in your estimations. Use the provided examples as benchmarks."""
 
@@ -167,6 +177,11 @@ async def estimate_project(request: EstimationRequest) -> EstimationResponse:
     - User message: Meeting transcription to estimate
     - Response: Detailed project estimation with task breakdown
 
+    The actual LLM call goes through LLMWrapper (LiteLLM), which transparently
+    falls back to a secondary provider if the primary one fails, and serves
+    repeated requests from an exact-match Redis cache. This endpoint never
+    knows — or needs to know — which provider actually answered.
+
     Args:
         request: EstimationRequest containing meeting transcription and optional hourly_rate
 
@@ -176,12 +191,9 @@ async def estimate_project(request: EstimationRequest) -> EstimationResponse:
     Raises:
         HTTPException: If estimation fails or response parsing fails
     """
-    settings = get_settings()
+    wrapper = get_llm_wrapper()
 
     try:
-        # Initialize Anthropic client
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-
         # Build system prompt with instructions and context examples
         system_prompt = build_system_prompt()
 
@@ -200,16 +212,11 @@ INSTRUCTIONS:
 
 Return only valid JSON, no additional text."""
 
-        # Call Anthropic API with CAG pattern
-        message = client.messages.create(
-            model=settings.llm_model,
-            max_tokens=4096,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
+        # Call the LLM through the wrapper (cache + provider fallback)
+        result = wrapper.complete(
+            system_prompt=system_prompt, user_message=user_message, max_tokens=4096
         )
-
-        # Extract response text
-        response_text = message.content[0].text
+        response_text = result["estimation"]
 
         # Parse JSON from response
         try:
@@ -230,36 +237,98 @@ Return only valid JSON, no additional text."""
         # Validate and convert to ProjectEstimation model
         estimation = ProjectEstimation(**estimation_data)
 
-        # Extract token usage
-        tokens_used = {
-            "input_tokens": message.usage.input_tokens,
-            "output_tokens": message.usage.output_tokens,
-            "total_tokens": message.usage.input_tokens + message.usage.output_tokens,
-        }
-
-        # Calculate costs
-        cost_breakdown = calculate_token_cost(
-            message.usage.input_tokens, message.usage.output_tokens
-        )
-
-        # Build response
+        # Build response — model/provider reflect whichever deployment actually
+        # answered (primary or fallback), not just the configured default
         return EstimationResponse(
             estimation=estimation,
-            model=settings.llm_model,
-            provider=settings.llm_provider,
-            tokens_used=tokens_used,
-            cost_breakdown=cost_breakdown,
+            model=result["model"],
+            provider=result["provider"],
+            tokens_used=result["usage"],
+            cost_breakdown=result["cost_breakdown"],
         )
 
     except HTTPException:
         raise
-    except anthropic.APIError as e:
-        raise HTTPException(
-            status_code=500, detail=f"Anthropic API error: {str(e)}"
-        )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=f"Validation error: {str(e)}")
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Unexpected error: {str(e)}"
         )
+
+
+@router.post("/estimate/stream")
+async def estimate_project_stream(request: EstimationRequest):
+    """
+    Stream a project estimation token-by-token using Server-Sent Events (SSE).
+
+    Unlike /estimate, the model is prompted to respond directly in Markdown
+    (see build_system_prompt(output_format="markdown")) instead of JSON, so
+    each raw token is already human-readable and can be shown to the user
+    the instant it's generated, with no post-processing needed.
+
+    Like /estimate, the actual call goes through LLMWrapper.complete_stream()
+    (cache + provider fallback) — this endpoint just relays chunks as SSE.
+
+    Event types sent to the client, one JSON object per "data:" line:
+    - {"type": "token", "content": "..."}   one text chunk, as generated by the model
+    - {"type": "done", "model": ..., "provider": ...,
+       "tokens_used": {...}, "cost_breakdown": {...}, "finish_reason": ...}
+    - {"type": "error", "message": "..."}
+    """
+    wrapper = get_llm_wrapper()
+    system_prompt = build_system_prompt(output_format="markdown")
+
+    user_message = f"""Based on the following meeting transcription, provide a detailed project estimation with task breakdown, hours, and costs.
+
+MEETING TRANSCRIPTION:
+{request.transcription}
+
+INSTRUCTIONS:
+- Use the hourly rate of ${request.hourly_rate}/hour for cost calculations
+- Be specific and realistic with estimates
+- Ensure all tasks are clearly defined with measurable deliverables
+- Include tasks for testing, documentation, and deployment
+- Provide assumptions made during estimation
+
+Respond only with the Markdown content described in the system prompt, no additional commentary."""
+
+    def event_stream():
+        # Populated in place by complete_stream() once the generator is exhausted
+        stream_result: dict = {}
+
+        try:
+            for text in wrapper.complete_stream(
+                system_prompt=system_prompt,
+                user_message=user_message,
+                max_tokens=4096,
+                result=stream_result,
+            ):
+                yield f"data: {json.dumps({'type': 'token', 'content': text})}\n\n"
+
+            done_payload = {
+                "type": "done",
+                "model": stream_result.get("model"),
+                "provider": stream_result.get("provider"),
+                "tokens_used": stream_result.get(
+                    "usage", {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+                ),
+                "cost_breakdown": stream_result.get(
+                    "cost_breakdown",
+                    {"input_cost_usd": 0.0, "output_cost_usd": 0.0, "total_cost_usd": 0.0},
+                ),
+                "finish_reason": stream_result.get("finish_reason", "stop"),
+            }
+            yield f"data: {json.dumps(done_payload)}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
