@@ -6,9 +6,9 @@ from typing import Any
 import redis
 import structlog
 from openai import OpenAI
-from redisvl.utils.vectorize import OpenAITextVectorizer
 
 from cag_estimate.cache.semantic import EstimationSemanticCache
+from cag_estimate.cache.vectorizer import LazyOpenAIVectorizer
 from cag_estimate.config import get_settings
 from cag_estimate.services.cache import get_cache
 from cag_estimate.services.estimation import EstimationService
@@ -39,8 +39,10 @@ def build_semantic_cache() -> EstimationSemanticCache | None:
         log.warning("semantic_cache_disabled", reason="no_openai_key")
         return None
     try:
-        vectorizer = OpenAITextVectorizer(
-            model=settings.embedding_model, api_config={"api_key": settings.openai_api_key}
+        vectorizer = LazyOpenAIVectorizer(
+            model=settings.embedding_model,
+            client=OpenAI(api_key=settings.openai_api_key),
+            dims=settings.embedding_dims,
         )
         return EstimationSemanticCache(
             redis_client=redis.from_url(settings.redis_url, decode_responses=False),

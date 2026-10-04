@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl_seconds: int = 86400
     embedding_model: str = "text-embedding-3-small"
+    # Needed only for embedding models missing from the built-in dimensions map.
+    embedding_dims: int | None = None
     # Single default for the semantic cache: cosine similarity needed to reuse an answer.
     semantic_cache_threshold: float = 0.90
     semantic_cache_ttl: int = 86400
