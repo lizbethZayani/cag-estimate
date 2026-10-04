@@ -1,0 +1,21 @@
+<%= form_with model: request, scope: :estimation_request, url: estimations_path, method: :post do |f| %>
+  <% if request.errors.any? %>
+    <ul>
+      <% request.errors.full_messages.each do |message| %>
+        <li><%= message %></li>
+      <% end %>
+    </ul>
+  <% end %>
+
+  <div>
+    <%= f.label :transcription, "Meeting transcription" %>
+    <%= f.text_area :transcription, rows: 12, required: true %>
+  </div>
+
+  <div>
+    <%= f.label :hourly_rate, "Hourly rate (USD)" %>
+    <%= f.number_field :hourly_rate, min: EstimationRequest::MIN_HOURLY_RATE, max: EstimationRequest::MAX_HOURLY_RATE, step: 1 %>
+  </div>
+
+  <%= f.submit "Estimate" %>
+<% end %>

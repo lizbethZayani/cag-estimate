@@ -1,0 +1,7 @@
+<section class="max-w-3xl mx-auto px-4 py-8">
+  <h1 class="text-2xl font-bold mb-4">New estimation</h1>
+  <% if flash[:alert] %>
+    <p role="alert" class="mb-4"><%= flash[:alert] %></p>
+  <% end %>
+  <%= render "form", request: @request %>
+</section>

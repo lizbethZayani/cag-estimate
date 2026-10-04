@@ -1,0 +1,15 @@
+<section class="max-w-4xl mx-auto px-4 py-8">
+  <h1 class="text-2xl font-bold mb-4">History</h1>
+  <% if @estimations.empty? %>
+    <p>No estimations yet. <%= link_to "Create one", new_estimation_path %>.</p>
+  <% else %>
+    <ul>
+      <% @estimations.each do |estimation| %>
+        <li>
+          <%= link_to estimation.transcription_preview, estimation_path(estimation) %>
+          <small><%= l(estimation.created_at, format: :short) %></small>
+        </li>
+      <% end %>
+    </ul>
+  <% end %>
+</section>
