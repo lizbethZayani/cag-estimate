@@ -1,9 +1,9 @@
 """
-Estimation orchestration: cache lookup, prompt rendering, structured LLM call.
+Estimation orchestration: input guardrail, cache lookup, prompt rendering,
+structured LLM call, output guardrail, cache store.
 
 ``estimate()`` is a short pipeline of single-purpose steps so later stages
-(input/output guardrails, semantic cache) can be added as extra steps around
-``_generate`` without rewriting the flow.
+(semantic cache) can be added as extra steps without rewriting the flow.
 """
 
 from __future__ import annotations
@@ -16,6 +16,8 @@ from typing import Any
 import structlog
 from pydantic import ValidationError
 
+from cag_estimate.guardrails.input import check_input
+from cag_estimate.guardrails.output import enforce_output
 from cag_estimate.prompts import render_estimation_prompt
 from cag_estimate.schemas.estimation import (
     EstimationRequest,
@@ -48,28 +50,49 @@ def build_cache_key(request: EstimationRequest, prompt_version: str, model: str)
 class EstimationService:
     """Produces validated project estimations."""
 
-    def __init__(self, wrapper: LLMWrapper, cache: EstimationCache) -> None:
+    def __init__(
+        self,
+        wrapper: LLMWrapper,
+        cache: EstimationCache,
+        moderation_client: Any | None = None,
+    ) -> None:
         self.wrapper = wrapper
         self.cache = cache
+        self.moderation_client = moderation_client
 
     def estimate(self, request: EstimationRequest) -> EstimationResponse:
+        # Input check first: a rejected input must never be served from cache.
+        self._check_input(request)
         key = build_cache_key(request, PROMPT_VERSION, self.wrapper.primary_model)
         cached = self._lookup(key)
         if cached is not None:
             return EstimationResponse(result=cached, prompt_version=PROMPT_VERSION, cached=True)
 
-        result = self._generate(request)
+        result = self._check_output(self._generate(request), request)
         self._store(key, result)
         return EstimationResponse(result=result, prompt_version=PROMPT_VERSION, cached=False)
 
     def stream(self, request: EstimationRequest, result: dict[str, Any]) -> Iterator[str]:
-        """Stream the markdown estimation; ``result`` is filled when it ends."""
+        """Stream the markdown estimation; ``result`` is filled when it ends.
+
+        The input guardrail runs eagerly (this is not a generator), so a
+        rejected input raises before any token is produced.
+        """
+        self._check_input(request)
         system, user = render_estimation_prompt(
             request, version=PROMPT_VERSION, output_format="markdown"
         )
         return self.wrapper.complete_stream(
             system_prompt=system, user_message=user, max_tokens=MAX_TOKENS, result=result
         )
+
+    def _check_input(self, request: EstimationRequest) -> None:
+        check_input(request.transcription, openai_client=self.moderation_client)
+
+    def _check_output(
+        self, result: ProjectEstimation, request: EstimationRequest
+    ) -> ProjectEstimation:
+        return enforce_output(result, request.hourly_rate)
 
     def _lookup(self, key: str) -> ProjectEstimation | None:
         payload = self.cache.get(key)

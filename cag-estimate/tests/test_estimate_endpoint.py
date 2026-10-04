@@ -11,6 +11,8 @@ from fastapi.testclient import TestClient
 from instructor.core.exceptions import InstructorRetryException
 
 from cag_estimate.dependencies import get_estimation_service
+from cag_estimate.guardrails.input import InputGuardrailViolation
+from cag_estimate.guardrails.output import OutputGuardrailViolation
 from cag_estimate.main import app
 from cag_estimate.schemas.estimation import EstimationRequest, EstimationResponse, ProjectEstimation
 
@@ -58,6 +60,8 @@ class FakeService:
         return _response()
 
     def stream(self, request: EstimationRequest, result: dict[str, Any]) -> Iterator[str]:
+        if isinstance(self.error, InputGuardrailViolation):
+            raise self.error
         yield "hello "
         if self.stream_error:
             raise RuntimeError(SECRET)
@@ -108,6 +112,36 @@ def test_upstream_failure_is_502_without_leak(error):
         "/api/v1/estimate", json={"transcription": "x"}
     )
     assert res.status_code == 502
+    assert SECRET not in res.text
+
+
+@pytest.mark.parametrize("reason", ["moderation", "prompt_injection", "pii"])
+def test_input_violation_is_400_with_reason_and_no_echo(reason):
+    error = InputGuardrailViolation(SECRET, reason=reason)
+    res = _client(FakeService(error=error)).post("/api/v1/estimate", json={"transcription": "x"})
+    body = res.json()
+    assert res.status_code == 400
+    assert body["reason"] == reason
+    assert body["message"]
+    assert SECRET not in res.text
+
+
+def test_output_violation_is_generic_502():
+    error = OutputGuardrailViolation(SECRET)
+    res = _client(FakeService(error=error)).post("/api/v1/estimate", json={"transcription": "x"})
+    assert res.status_code == 502
+    assert SECRET not in res.text
+
+
+def test_stream_input_violation_is_a_single_safe_error_event():
+    error = InputGuardrailViolation(SECRET, reason="pii")
+    res = _client(FakeService(error=error)).post(
+        "/api/v1/estimate/stream", json={"transcription": "x"}
+    )
+    events = _events(res.text)
+    assert res.status_code == 200
+    assert [e["type"] for e in events] == ["error"]
+    assert events[0]["reason"] == "pii"
     assert SECRET not in res.text
 
 
