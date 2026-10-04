@@ -11,35 +11,7 @@ from structlog.testing import capture_logs
 from cag_estimate.cache import semantic
 from cag_estimate.cache.semantic import EstimationSemanticCache
 from cag_estimate.schemas.estimation import EstimationRequest, ProjectEstimation
-
-
-def _estimation() -> ProjectEstimation:
-    tasks = [
-        {
-            "task_id": i,
-            "name": f"Task {i}",
-            "description": "desc",
-            "estimated_hours": 10,
-            "estimated_cost_usd": 400,
-            "complexity": "Medium",
-            "includes": ["code"],
-        }
-        for i in range(1, 4)
-    ]
-    return ProjectEstimation.model_validate(
-        {
-            "project_name": "Demo",
-            "meeting_summary": "summary",
-            "tasks": tasks,
-            "summary": {
-                "total_hours": 30,
-                "total_cost_usd": 1200,
-                "team_size": "2 developers",
-                "estimated_duration_weeks": 2,
-                "hourly_rate": 40,
-            },
-        }
-    )
+from tests.conftest import build_estimation
 
 
 class FakeIndex:
@@ -110,7 +82,7 @@ def request_() -> EstimationRequest:
 
 
 def _hit(distance: float, payload: str | None = None) -> dict[str, Any]:
-    result_json = payload if payload is not None else _estimation().model_dump_json()
+    result_json = payload if payload is not None else build_estimation().model_dump_json()
     return {"result_json": result_json, "vector_distance": str(distance)}
 
 
@@ -202,7 +174,7 @@ def test_lookup_error_is_swallowed(request_):
 
 def test_store_loads_with_ttl_and_float32_embedding(request_):
     cache, index = _cache(ttl=123)
-    cache.store(request_, _estimation(), "v1")
+    cache.store(request_, build_estimation(), "v1")
 
     (rows, ttl) = index.loaded[0]
     assert ttl == 123
@@ -218,7 +190,7 @@ def test_store_error_is_swallowed_and_logged(request_):
     index.load_error = RuntimeError("boom")
 
     with capture_logs() as logs:
-        cache.store(request_, _estimation(), "v1")
+        cache.store(request_, build_estimation(), "v1")
 
     assert any(e["event"] == "semantic_cache_store_failed" for e in logs)
 
