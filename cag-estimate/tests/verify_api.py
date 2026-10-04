@@ -6,17 +6,28 @@ This script tests the actual API endpoint with example transcriptions
 and validates the response through the complete verification pipeline.
 """
 
-import json
 import sys
+from typing import Any
+
 import requests
-from typing import Dict, Any
 from test_verification import EstimationValidator
+
+ERROR_SECTIONS = (
+    ("Business Logic Errors", "business_logic_errors"),
+    ("Reasonableness Errors", "reasonableness_errors"),
+    ("Quality Errors", "quality_errors"),
+    ("Consistency Errors", "consistency_errors"),
+)
+
+
+class APIError(RuntimeError):
+    """The API answered with a non-200 status."""
 
 
 class APIVerifier:
     """Verifies CAG Estimate API responses."""
 
-    def __init__(self, base_url: str = "http://127.0.0.1:8001"):
+    def __init__(self, base_url: str = "http://127.0.0.1:8001") -> None:
         self.base_url = base_url
         self.validator = EstimationValidator()
 
@@ -28,7 +39,7 @@ class APIVerifier:
         except requests.exceptions.ConnectionError:
             return False
 
-    def estimate_project(self, transcription: str, hourly_rate: int = 40) -> Dict[str, Any]:
+    def estimate_project(self, transcription: str, hourly_rate: int = 40) -> dict[str, Any]:
         """Call the API estimation endpoint."""
         payload = {"transcription": transcription, "hourly_rate": hourly_rate}
 
@@ -37,15 +48,15 @@ class APIVerifier:
         )
 
         if response.status_code != 200:
-            raise Exception(f"API error: {response.status_code} - {response.text}")
+            raise APIError(f"API error: {response.status_code} - {response.text}")
 
         return response.json()
 
-    def verify_response(self, response: Dict[str, Any]) -> Dict[str, Any]:
+    def verify_response(self, response: dict[str, Any]) -> dict[str, Any]:
         """Verify API response through complete validation pipeline."""
         return self.validator.validate_complete(response)
 
-    def print_estimation_summary(self, estimation: Dict[str, Any]):
+    def print_estimation_summary(self, estimation: dict[str, Any]) -> None:
         """Pretty print estimation summary."""
         summary = estimation.get("summary", {})
         print()
@@ -70,7 +81,7 @@ class APIVerifier:
             print(f"  ... and {len(estimation['tasks']) - 5} more tasks")
         print()
 
-    def print_token_costs(self, response: Dict[str, Any]):
+    def print_token_costs(self, response: dict[str, Any]) -> None:
         """Print token usage and costs."""
         tokens = response.get("tokens_used", {})
         costs = response.get("cost_breakdown", {})
@@ -86,7 +97,7 @@ class APIVerifier:
         print(f"Total API Cost: ${costs.get('total_cost_usd', 0):.6f}")
         print()
 
-    def print_verification_result(self, result: Dict[str, Any]):
+    def print_verification_result(self, result: dict[str, Any]) -> None:
         """Print verification results."""
         print("✅ VERIFICATION RESULTS")
         print("-" * 70)
@@ -95,28 +106,65 @@ class APIVerifier:
             print("Status: ✅ ALL VALIDATIONS PASSED")
         else:
             print("Status: ❌ VALIDATION FAILED")
-            if result.get("business_logic_errors"):
-                print("\nBusiness Logic Errors:")
-                for error in result["business_logic_errors"]:
-                    print(f"  - {error}")
-            if result.get("reasonableness_errors"):
-                print("\nReasonableness Errors:")
-                for error in result["reasonableness_errors"]:
-                    print(f"  - {error}")
-            if result.get("quality_errors"):
-                print("\nQuality Errors:")
-                for error in result["quality_errors"]:
-                    print(f"  - {error}")
-            if result.get("consistency_errors"):
-                print("\nConsistency Errors:")
-                for error in result["consistency_errors"]:
-                    print(f"  - {error}")
+            for label, key in ERROR_SECTIONS:
+                if result.get(key):
+                    print(f"\n{label}:")
+                    for error in result[key]:
+                        print(f"  - {error}")
 
         print(f"\nTotal Errors: {result.get('total_errors', 0)}")
         print()
 
 
-def main():
+CASES = (
+    (
+        "TEST 1: Grocery Price Comparison App (iOS)",
+        (
+            "we have to estimate a new feature for the mobile app in iOS only, "
+            "than most include a new chat with an agent than support the grocery shopping "
+            "carts creation base on the grocery shops around where you live as food is quite "
+            "becoming expensive we most save money on food so we most copare the prices of "
+            "the produces than i want to eat, so we most compare also the labels with the "
+            "ingredientes to filter out the most natural food and organic so estimate this project"
+        ),
+        40,
+    ),
+    (
+        "TEST 2: Simple Feature - User Dashboard",
+        (
+            "We need to build a user dashboard for our SaaS product. "
+            "Features include: user profile management, analytics widgets showing "
+            "key metrics, data export to CSV, and real-time notifications. "
+            "We need both web and mobile responsive design."
+        ),
+        50,
+    ),
+)
+
+
+def run_case(verifier: APIVerifier, title: str, transcription: str, hourly_rate: int) -> bool:
+    """Run one estimation request through the verification pipeline."""
+    print("\n" + "=" * 70)
+    print(title)
+    print("=" * 70)
+
+    try:
+        print("\n📤 Sending estimation request...")
+        response = verifier.estimate_project(transcription, hourly_rate=hourly_rate)
+        print("✅ Received response from API")
+        verifier.print_estimation_summary(response["estimation"])
+        verifier.print_token_costs(response)
+
+        print("🔐 Running verification pipeline...")
+        verification_result = verifier.verify_response(response)
+        verifier.print_verification_result(verification_result)
+        return bool(verification_result["valid"])
+    except Exception as e:  # noqa: BLE001 - CLI boundary: report any failure as exit code 1
+        print(f"❌ Error: {e!s}")
+        return False
+
+
+def main() -> int:
     """Main verification flow."""
     print("\n" + "=" * 70)
     print("CAG ESTIMATE - API VERIFICATION SCRIPT")
@@ -135,79 +183,9 @@ def main():
 
     print("✅ API is running and healthy")
 
-    # Example 1: Grocery Price Comparison App
-    print("\n" + "=" * 70)
-    print("TEST 1: Grocery Price Comparison App (iOS)")
-    print("=" * 70)
-
-    transcription_1 = (
-        "we have to estimate a new feature for the mobile app in iOS only, "
-        "than most include a new chat with an agent than support the grocery shopping "
-        "carts creation base on the grocery shops around where you live as food is quite "
-        "becoming expensive we most save money on food so we most copare the prices of "
-        "the produces than i want to eat, so we most compare also the labels with the "
-        "ingredientes to filter out the most natural food and organic so estimate this project"
-    )
-
-    try:
-        print("\n📤 Sending estimation request...")
-        response = verifier.estimate_project(transcription_1, hourly_rate=40)
-
-        print("✅ Received response from API")
-
-        # Print summary
-        verifier.print_estimation_summary(response["estimation"])
-
-        # Print token costs
-        verifier.print_token_costs(response)
-
-        # Verify response
-        print("🔐 Running verification pipeline...")
-        verification_result = verifier.verify_response(response)
-        verifier.print_verification_result(verification_result)
-
-        if not verification_result["valid"]:
+    for title, transcription, rate in CASES:
+        if not run_case(verifier, title, transcription, rate):
             return 1
-
-    except Exception as e:
-        print(f"❌ Error: {str(e)}")
-        return 1
-
-    # Example 2: Simple feature request
-    print("\n" + "=" * 70)
-    print("TEST 2: Simple Feature - User Dashboard")
-    print("=" * 70)
-
-    transcription_2 = (
-        "We need to build a user dashboard for our SaaS product. "
-        "Features include: user profile management, analytics widgets showing "
-        "key metrics, data export to CSV, and real-time notifications. "
-        "We need both web and mobile responsive design."
-    )
-
-    try:
-        print("\n📤 Sending estimation request...")
-        response = verifier.estimate_project(transcription_2, hourly_rate=50)
-
-        print("✅ Received response from API")
-
-        # Print summary
-        verifier.print_estimation_summary(response["estimation"])
-
-        # Print token costs
-        verifier.print_token_costs(response)
-
-        # Verify response
-        print("🔐 Running verification pipeline...")
-        verification_result = verifier.verify_response(response)
-        verifier.print_verification_result(verification_result)
-
-        if not verification_result["valid"]:
-            return 1
-
-    except Exception as e:
-        print(f"❌ Error: {str(e)}")
-        return 1
 
     # Summary
     print("\n" + "=" * 70)

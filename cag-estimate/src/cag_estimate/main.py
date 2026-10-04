@@ -19,6 +19,7 @@ from cag_estimate.config import get_settings
 from cag_estimate.logging_config import configure_logging
 from cag_estimate.routers import estimations
 
+
 # Health check response model
 class HealthStatus(BaseModel):
     """Health check response."""
