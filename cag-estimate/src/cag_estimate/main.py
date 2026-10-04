@@ -8,10 +8,15 @@ task breakdowns with hours, costs, and resource requirements.
 Access the interactive API documentation at /docs (Swagger UI) or /redoc (ReDoc).
 """
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from cag_estimate.config import get_settings
+from cag_estimate.logging_config import configure_logging
 from cag_estimate.routers import estimations
 
 # Health check response model
@@ -22,8 +27,16 @@ class HealthStatus(BaseModel):
     service: str
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Configure logging once at startup from ``Settings.log_level``."""
+    configure_logging(get_settings().log_level)
+    yield
+
+
 # Create FastAPI app with detailed documentation
 app = FastAPI(
+    lifespan=lifespan,
     title="CAG Estimate API",
     description="Context-Augmented Generation for Project Estimation - Generates detailed project estimations based on meeting transcriptions",
     version="0.1.0",
