@@ -157,6 +157,73 @@ def test_stream_live_accumulates_and_caches(cache: EstimationCache) -> None:
     assert replay["estimation"] == "ab" and replay["cache_hit"] is True
 
 
+def test_stream_requests_usage_from_provider(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache)
+    wrapper.router = FakeRouter([iter([_chunk("a", "stop")])])
+
+    list(wrapper.complete_stream(system_prompt="s", user_message="u"))
+
+    assert wrapper.router.calls[0]["stream_options"] == {"include_usage": True}
+
+
+def test_stream_requests_usage_on_direct_model_call(
+    cache: EstimationCache, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_completion(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return iter([_chunk("a", "stop")])
+
+    monkeypatch.setattr(litellm, "completion", fake_completion)
+
+    list(
+        _wrapper(cache).complete_stream(
+            system_prompt="s", user_message="u", model_override="gpt-4o-mini"
+        )
+    )
+
+    assert captured["stream_options"] == {"include_usage": True}
+
+
+def test_blocking_call_does_not_send_stream_options(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache)
+    wrapper.router = FakeRouter([_text_response("x")])
+
+    wrapper.complete(system_prompt="s", user_message="u")
+
+    assert "stream_options" not in wrapper.router.calls[0]
+
+
+def test_stream_captures_usage_from_final_usage_only_chunk(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache)
+    usage = SimpleNamespace(prompt_tokens=1000, completion_tokens=500, total_tokens=1500)
+    usage_chunk = SimpleNamespace(choices=[], usage=usage, model=PRIMARY)
+    wrapper.router = FakeRouter([iter([_chunk("a"), _chunk("", "stop"), usage_chunk])])
+    meta: dict[str, Any] = {}
+
+    chunks = list(wrapper.complete_stream(system_prompt="s", user_message="u", result=meta))
+
+    assert chunks == ["a"]
+    assert meta["usage"] == {"input_tokens": 1000, "output_tokens": 500, "total_tokens": 1500}
+    assert meta["cost_breakdown"]["total_cost_usd"] == 0.0035
+
+
+def test_stream_cached_replay_keeps_stored_usage(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache)
+    usage = SimpleNamespace(prompt_tokens=7, completion_tokens=3, total_tokens=10)
+    wrapper.router = FakeRouter(
+        [iter([_chunk("a", "stop"), SimpleNamespace(choices=[], usage=usage)])]
+    )
+    list(wrapper.complete_stream(system_prompt="s", user_message="u"))
+    wrapper.router = FakeRouter([])
+    meta: dict[str, Any] = {}
+
+    list(wrapper.complete_stream(system_prompt="s", user_message="u", result=meta))
+
+    assert meta["usage"] == {"input_tokens": 7, "output_tokens": 3, "total_tokens": 10}
+
+
 def test_stream_cache_hit_replays_single_chunk(cache: EstimationCache) -> None:
     wrapper = _wrapper(cache)
     wrapper.router = FakeRouter([_text_response("cached text")])

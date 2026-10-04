@@ -307,7 +307,9 @@ class LLMWrapper:
         wants a specific model. ``extra`` carries Instructor's tool arguments."""
         kwargs: dict[str, Any] = {"messages": messages, "max_tokens": max_tokens, **extra}
         if stream:
+            # Without this, providers send no usage in streams (tokens/cost stay 0).
             kwargs["stream"] = True
+            kwargs["stream_options"] = {"include_usage": True}
 
         if model_override:
             api_key = (
@@ -455,18 +457,19 @@ def _extract_usage(usage_obj: Any) -> dict[str, int] | None:
 
 def _inspect_chunk(chunk: Any) -> tuple[str, str | None, dict[str, int] | None]:
     """Pull the text delta, finish_reason, and (if present) usage out of a
-    LiteLLM streaming chunk. Usage is only populated on the final chunk, and
-    only for providers that report it mid-stream via LiteLLM."""
+    LiteLLM streaming chunk. With ``stream_options.include_usage`` the usage
+    arrives on a final chunk whose ``choices`` list is empty."""
+    usage = _extract_usage(getattr(chunk, "usage", None))
     try:
         choice = chunk.choices[0]
     except (AttributeError, IndexError):
-        return "", None, None
+        return "", None, usage
 
     delta_obj = getattr(choice, "delta", None)
     content = getattr(delta_obj, "content", None) or ""
     finish_reason = getattr(choice, "finish_reason", None)
     finish_reason = finish_reason.lower() if finish_reason else None
-    return content, finish_reason, _extract_usage(getattr(chunk, "usage", None))
+    return content, finish_reason, usage
 
 
 @lru_cache
