@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/* Neutral dark theme. Token names are shared with the views (bg-ink-dark, text-brand, ...). */
+@theme {
+  --color-brand:        #7DD3FC;
+  --color-brand-soft:   #BAE6FD;
+  --color-brand-strong: #0EA5E9;
+
+  --color-ink:          #111827;
+  --color-ink-dark:     #1F2937;
+  --color-ink-soft:     #374151;
+  --color-ink-muted:    #6B7280;
+
+  --color-success:       #22C55E;
+  --color-success-light: #86EFAC;
+
+  --font-sans: "Helvetica", "Arial", sans-serif;
+
+  --tracking-tight:   -0.02em;
+  --tracking-tighter: -0.04em;
+}

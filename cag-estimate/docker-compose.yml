@@ -63,6 +63,57 @@ services:
       - "com.cag-estimate.service=api"
       - "com.cag-estimate.description=CAG Estimate API Service"
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: estimator-web-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: estimator_web_development
+    volumes:
+      - estimator-web-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d estimator_web_development"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - cag-network
+
+  estimator-web:
+    build:
+      context: ../estimator-web
+    container_name: estimator-web
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      RAILS_ENV: development
+      ESTIMATOR_API_BASE_URL: http://api:8000
+      # LLM calls over long transcriptions can take 1-2 min.
+      ESTIMATOR_AI_TIMEOUT: "180"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../estimator-web:/rails
+      # Named volume so the bind mount does not shadow installed gems.
+      - estimator-web-bundle:/usr/local/bundle
+    command: sh -c "rm -f tmp/pids/server.pid && bin/rails db:prepare && bin/dev"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/up"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - cag-network
+
 networks:
   cag-network:
     driver: bridge
@@ -71,3 +122,7 @@ networks:
 volumes:
   redis-data:
     name: cag-estimate-redis-data
+  estimator-web-pg-data:
+    name: estimator-web-pg-data
+  estimator-web-bundle:
+    name: estimator-web-bundle
