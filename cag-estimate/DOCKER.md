@@ -7,6 +7,7 @@ This document explains how to run the CAG Estimate API using Docker and Docker C
 - [Docker](https://www.docker.com/get-started) (version 20.10+)
 - [Docker Compose](https://docs.docker.com/compose/install/) (version 1.29+)
 - Anthropic API Key (required)
+- OpenAI API Key (optional; needed for the semantic cache, moderation and the fallback model)
 
 ## Quick Start
 
@@ -99,12 +100,20 @@ docker-compose build --no-cache api
 
 ### Main Configuration (`docker-compose.yml`)
 
+- **Service:** `redis`
+  - Image: `redis/redis-stack:7.4.0-v0` (Redis with RediSearch; required by the semantic cache, plain `redis:7-alpine` is not enough)
+  - Port: `6379:6379`
+  - Data volume: `cag-estimate-redis-data`
+  - Used for the exact cache and the semantic (vector) cache
 - **Service:** `api`
   - Port: `8000:8000`
+  - Waits for `redis` to be healthy; `REDIS_URL` is fixed to `redis://redis:6379/0`
   - Health checks enabled
   - Auto-restart on failure
   - Network isolation
   - Non-root user (appuser, uid 1000)
+
+This image (`redis-stack`) bundles RedisInsight on port 8001, but the compose file only publishes `6379`. To use the RedisInsight UI add `- "8001:8001"` to the `redis` ports.
 
 ### Development Overrides (`docker-compose.override.yml`)
 
@@ -125,7 +134,20 @@ Automatically applied when using `docker-compose up`. Provides:
 - `LLM_PROVIDER` - LLM provider (default: `anthropic`)
 - `LLM_MODEL` - Claude model to use (default: `claude-haiku-4-5-20251001`)
 - `APP_ENV` - Application environment: `development` or `production` (default: `production`)
-- `LOG_LEVEL` - Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` (default: `INFO`)
+- `LOG_LEVEL` - Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR` (default: `INFO`; `docker-compose.override.yml` sets `DEBUG`)
+- `OPENAI_API_KEY` - Enables moderation, the fallback model and the semantic-cache embeddings
+- `FALLBACK_MODEL` - Fallback model (default: `gpt-4o-mini`)
+- `CACHE_TTL_SECONDS` - Exact-cache TTL (default: `86400`)
+
+Semantic cache (all passed through to the `api` container by `docker-compose.yml`):
+
+- `EMBEDDING_MODEL` - Embedding model (default: `text-embedding-3-small`)
+- `SEMANTIC_CACHE_ENABLED` - `true` or `false` (default: `true`)
+- `SEMANTIC_CACHE_THRESHOLD` - Minimum cosine similarity for a hit (default: `0.90`)
+- `SEMANTIC_CACHE_TTL` - Entry TTL in seconds (default: `86400`)
+- `SEMANTIC_CACHE_LOG_ONLY` - Log would-be hits without serving them (default: `false`)
+
+Without `OPENAI_API_KEY` the semantic cache is disabled and the API keeps working. `.env.example` does not list the semantic-cache variables; set them in your `.env` or the shell if you need non-default values.
 
 ## Docker Image Details
 
@@ -147,17 +169,15 @@ Automatically applied when using `docker-compose up`. Provides:
 
 ## Running Tests in Docker
 
-### Run Verification Tests
+### Run the Test Suite
+
+The compose file mounts `./tests` read-only, but dev dependencies are not installed in the image; run the suite on the host instead:
 
 ```bash
-docker-compose exec api python tests/test_verification.py
+uv run pytest
 ```
 
-### Run API Integration Tests
-
-```bash
-docker-compose exec api python tests/verify_api.py
-```
+For an end-to-end check against the running containers see [VERIFICATION.md](./VERIFICATION.md).
 
 ### Access Container Shell
 
@@ -250,30 +270,8 @@ kompose convert -f docker-compose.yml
 
 ### Current Services
 
+- **redis** - Redis Stack (exact cache + semantic cache)
 - **api** - CAG Estimate FastAPI application
-
-### Future Expansion
-
-To add more services (e.g., database, cache), update `docker-compose.yml`:
-
-```yaml
-services:
-  api:
-    # ... existing config
-  
-  postgres:
-    image: postgres:15-alpine
-    environment:
-      POSTGRES_PASSWORD: password
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-  
-  redis:
-    image: redis:7-alpine
-
-volumes:
-  postgres_data:
-```
 
 ## Example: Full Workflow
 
