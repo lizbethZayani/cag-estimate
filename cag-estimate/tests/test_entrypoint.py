@@ -1,11 +1,15 @@
 """Tests for the ``cag-estimate`` console script entry point."""
 
+import importlib
 from unittest.mock import patch
 
 import cag_estimate
 
 
 def test_main_runs_uvicorn_on_the_fastapi_app():
+    # Importing the ``cag_estimate.main`` submodule elsewhere shadows the
+    # ``main`` function attribute; reload restores the package namespace.
+    importlib.reload(cag_estimate)
     with patch("uvicorn.run") as run:
         cag_estimate.main()
 
