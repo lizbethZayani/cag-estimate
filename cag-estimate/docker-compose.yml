@@ -2,7 +2,7 @@ version: '3.9'
 
 services:
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack:7.4.0-v0
     container_name: cag-estimate-redis
     ports:
       - "6379:6379"
@@ -18,7 +18,7 @@ services:
       - cag-network
     labels:
       - "com.cag-estimate.service=cache"
-      - "com.cag-estimate.description=Exact-match cache for LLM responses"
+      - "com.cag-estimate.description=Exact-match and semantic (RediSearch) cache for LLM responses"
 
   api:
     build:

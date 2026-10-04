@@ -3,9 +3,12 @@
 from functools import lru_cache
 from typing import Any
 
+import redis
 import structlog
 from openai import OpenAI
+from redisvl.utils.vectorize import OpenAITextVectorizer
 
+from cag_estimate.cache.semantic import EstimationSemanticCache
 from cag_estimate.config import get_settings
 from cag_estimate.services.cache import get_cache
 from cag_estimate.services.estimation import EstimationService
@@ -26,7 +29,40 @@ def build_moderation_client() -> Any | None:
         return None
 
 
+def build_semantic_cache() -> EstimationSemanticCache | None:
+    """Semantic cache, or None when disabled, keyless, or Redis Stack is unavailable."""
+    settings = get_settings()
+    if not settings.semantic_cache_enabled:
+        log.warning("semantic_cache_disabled", reason="disabled_by_settings")
+        return None
+    if not settings.openai_api_key:
+        log.warning("semantic_cache_disabled", reason="no_openai_key")
+        return None
+    try:
+        vectorizer = OpenAITextVectorizer(
+            model=settings.embedding_model, api_config={"api_key": settings.openai_api_key}
+        )
+        return EstimationSemanticCache(
+            redis_client=redis.from_url(settings.redis_url, decode_responses=False),
+            vectorizer=vectorizer,
+            threshold=settings.semantic_cache_threshold,
+            ttl=settings.semantic_cache_ttl,
+            log_only=settings.semantic_cache_log_only,
+        )
+    except Exception as exc:  # noqa: BLE001 - optional layer, fail soft
+        log.warning("semantic_cache_disabled", reason="setup_failed", error_type=type(exc).__name__)
+        return None
+
+
+@lru_cache
+def get_semantic_cache() -> EstimationSemanticCache | None:
+    """Process-wide semantic cache (None when unavailable)."""
+    return build_semantic_cache()
+
+
 @lru_cache
 def get_estimation_service() -> EstimationService:
     """Process-wide estimation service built from the shared singletons."""
-    return EstimationService(get_llm_wrapper(), get_cache(), build_moderation_client())
+    return EstimationService(
+        get_llm_wrapper(), get_cache(), build_moderation_client(), get_semantic_cache()
+    )

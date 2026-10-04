@@ -1,9 +1,9 @@
 """
-Estimation orchestration: input guardrail, cache lookup, prompt rendering,
+Estimation orchestration: input guardrail, exact + semantic cache lookup, prompt rendering,
 structured LLM call, output guardrail, cache store.
 
-``estimate()`` is a short pipeline of single-purpose steps so later stages
-(semantic cache) can be added as extra steps without rewriting the flow.
+``estimate()`` is a short pipeline of single-purpose steps; the semantic
+cache is optional and the pipeline works unchanged without it.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from typing import Any
 import structlog
 from pydantic import ValidationError
 
+from cag_estimate.cache.semantic import EstimationSemanticCache
 from cag_estimate.guardrails.input import check_input
 from cag_estimate.guardrails.output import enforce_output
 from cag_estimate.prompts import render_estimation_prompt
@@ -55,21 +56,23 @@ class EstimationService:
         wrapper: LLMWrapper,
         cache: EstimationCache,
         moderation_client: Any | None = None,
+        semantic_cache: EstimationSemanticCache | None = None,
     ) -> None:
         self.wrapper = wrapper
         self.cache = cache
         self.moderation_client = moderation_client
+        self.semantic_cache = semantic_cache
 
     def estimate(self, request: EstimationRequest) -> EstimationResponse:
         # Input check first: a rejected input must never be served from cache.
         self._check_input(request)
         key = build_cache_key(request, PROMPT_VERSION, self.wrapper.primary_model)
-        cached = self._lookup(key)
+        cached = self._lookup(key) or self._lookup_semantic(request)
         if cached is not None:
             return EstimationResponse(result=cached, prompt_version=PROMPT_VERSION, cached=True)
 
         result = self._check_output(self._generate(request), request)
-        self._store(key, result)
+        self._store(key, request, result)
         return EstimationResponse(result=result, prompt_version=PROMPT_VERSION, cached=False)
 
     def stream(self, request: EstimationRequest, result: dict[str, Any]) -> Iterator[str]:
@@ -104,6 +107,11 @@ class EstimationService:
             log.warning("estimation_cache_corrupt", key_prefix=key[:24])
             return None
 
+    def _lookup_semantic(self, request: EstimationRequest) -> ProjectEstimation | None:
+        if self.semantic_cache is None:
+            return None
+        return self.semantic_cache.lookup(request, PROMPT_VERSION)
+
     def _generate(self, request: EstimationRequest) -> ProjectEstimation:
         system, user = render_estimation_prompt(
             request, version=PROMPT_VERSION, output_format="json"
@@ -116,5 +124,7 @@ class EstimationService:
         )
         return result
 
-    def _store(self, key: str, result: ProjectEstimation) -> None:
+    def _store(self, key: str, request: EstimationRequest, result: ProjectEstimation) -> None:
         self.cache.set(key, {"result": result.model_dump(mode="json")})
+        if self.semantic_cache is not None:
+            self.semantic_cache.store(request, result, PROMPT_VERSION)

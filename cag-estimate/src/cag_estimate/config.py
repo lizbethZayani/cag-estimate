@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     llm_num_retries: int = 2
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl_seconds: int = 86400
+    embedding_model: str = "text-embedding-3-small"
+    # Single default for the semantic cache: cosine similarity needed to reuse an answer.
+    semantic_cache_threshold: float = 0.90
+    semantic_cache_ttl: int = 86400
+    # Log would-be hits without serving them (to calibrate the threshold).
+    semantic_cache_log_only: bool = False
+    semantic_cache_enabled: bool = True
     app_env: str = "development"
     log_level: str = "DEBUG"
 

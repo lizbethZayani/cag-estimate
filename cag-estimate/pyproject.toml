@@ -19,6 +19,7 @@ dependencies = [
     "instructor>=1.5",
     "redisvl>=0.3",
     "numpy",
+    "openai>=1.0",
 ]
 
 [project.scripts]
