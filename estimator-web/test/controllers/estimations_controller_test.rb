@@ -24,6 +24,90 @@ class EstimationsControllerTest < ActionDispatch::IntegrationTest
     assert_select "input[name='estimation_request[hourly_rate]']"
   end
 
+  test "GET new renders labels, upload, stimulus controllers and nav" do
+    get new_estimation_path
+    assert_select "header nav a[href='#{new_estimation_path}']", text: "New estimation"
+    assert_select "header nav a[href='#{estimations_path}']", text: "History"
+    assert_select "form[data-controller~='transcription-upload'][data-controller~='form-loading']"
+    assert_select "label", text: "Meeting transcription or project description"
+    assert_select "label", text: "Hourly rate (USD)"
+    assert_select "textarea[rows='12']"
+    assert_select "input[type=file][accept*='.txt']"
+    assert_select "input[name='estimation_request[hourly_rate]'][value='40']"
+    assert_select "[data-form-loading-target='statusPanel'][aria-live='polite']"
+    assert_select "button[type=submit]", text: /Generate estimation/
+    assert_match "20 and 80,000", response.body
+  end
+
+  test "GET show renders stat cards, task rows, badges and assumptions" do
+    stub_api(status: 200, body: estimation_payload)
+    post estimations_path, params: @params
+    follow_redirect!
+
+    assert_select "h1", text: "Customer Portal & Invoice Management System"
+    assert_select "[data-stat='total-hours']", text: /298/
+    assert_select "[data-stat='total-cost']", text: /14,900/
+    assert_select "[data-stat='duration']", text: /7/
+    assert_select "[data-stat='team-size']", text: /2 developers/
+    assert_select "[data-stat='hourly-rate']", text: /50/
+    assert_select "table tbody tr", count: estimation_payload["result"]["tasks"].size
+    assert_select "[data-complexity='Medium']", text: "Medium"
+    assert_select "table tfoot", text: /298/
+    assert_select "h2", text: "Assumptions"
+    assert_select "li", text: "No legacy system integration required"
+    assert_select "[data-badge='prompt']", text: "prompt v1"
+    assert_select "[data-badge='cached']", count: 0
+    assert_select "a[href='#{new_estimation_path}']", text: "New estimation"
+  end
+
+  test "GET show renders the cached badge only when cached" do
+    estimation = Estimation.create!(transcription: "Portal for invoices and payments", hourly_rate: 50,
+                                    response_payload: estimation_payload(cached: true),
+                                    prompt_version: "v1", cached: true)
+    get estimation_path(estimation)
+    assert_select "[data-badge='cached']", text: "cached"
+  end
+
+  test "GET show handles empty assumptions" do
+    payload = estimation_payload
+    payload["result"]["summary"]["assumptions"] = []
+    estimation = Estimation.create!(transcription: "Portal for invoices and payments", hourly_rate: 50,
+                                    response_payload: payload, prompt_version: "v1")
+    get estimation_path(estimation)
+    assert_response :success
+    assert_select "h2", text: "Assumptions", count: 0
+  end
+
+  test "GET index renders history rows" do
+    Estimation.create!(transcription: "Portal for invoices and payments", hourly_rate: 50,
+                       response_payload: estimation_payload, prompt_version: "v1", cached: true)
+    get estimations_path
+    assert_select "table tbody tr", count: 1
+    assert_select "tbody td", text: /298/
+    assert_select "tbody td", text: /14,900/
+    assert_select "[data-badge='prompt']", text: "v1"
+    assert_select "[data-badge='cached']"
+    assert_select "tbody a", text: "View"
+    assert_select "a[href='#{new_estimation_path}']", text: "New estimation"
+  end
+
+  test "GET index renders the empty state" do
+    Estimation.delete_all
+    get estimations_path
+    assert_select "[data-empty-state]", text: /No estimations yet/
+    assert_select "table", count: 0
+  end
+
+  test "guardrail and 503 alerts carry distinct kinds" do
+    stub_api(status: 400, body: { reason: "pii", message: "Please remove personal data." })
+    post estimations_path, params: @params
+    assert_select "[role=alert][data-kind='rejected']", text: /Please remove personal data/
+
+    stub_api(status: 502, body: { detail: "x" })
+    post estimations_path, params: @params
+    assert_select "[role=alert][data-kind='unavailable']"
+  end
+
   test "root is the new form" do
     get root_path
     assert_response :success

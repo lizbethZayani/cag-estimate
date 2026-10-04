@@ -30,10 +30,12 @@ class EstimationsController < ApplicationController
     redirect_to estimation_path(@estimation)
   rescue EstimatorAi::Client::GuardrailViolation, EstimatorAi::Client::InvalidRequest => e
     flash.now[:alert] = e.message
+    flash.now[:alert_kind] = "rejected"
     render :new, status: :unprocessable_entity
   rescue EstimatorAi::Client::ServerError, Faraday::ConnectionFailed, Faraday::TimeoutError => e
     Rails.logger.error("Estimator API failure: #{e.class}: #{e.message}")
     flash.now[:alert] = UNAVAILABLE_MESSAGE
+    flash.now[:alert_kind] = "unavailable"
     render :new, status: :service_unavailable
   end
 

@@ -1,52 +1,90 @@
 <% result = @response.result %>
 <% summary = result.summary %>
-<section class="max-w-4xl mx-auto px-4 py-8">
-  <h1 class="text-2xl font-bold"><%= result.project_name %></h1>
-  <p>
-    <% if @response.cached %><span>Cached</span><% end %>
-    <span>Prompt <%= @response.prompt_version %></span>
-  </p>
-  <p class="whitespace-pre-line"><%= result.meeting_summary %></p>
+<div class="max-w-4xl mx-auto py-12 px-4">
 
-  <h2 class="text-xl font-semibold mt-6">Summary</h2>
-  <dl>
-    <dt>Total hours</dt><dd><%= number_with_delimiter(summary.total_hours) %> h</dd>
-    <dt>Total cost</dt><dd><%= number_to_currency(summary.total_cost_usd, precision: 0) %></dd>
-    <dt>Team size</dt><dd><%= summary.team_size %></dd>
-    <dt>Duration</dt><dd><%= summary.estimated_duration_weeks %> weeks</dd>
-    <dt>Hourly rate</dt><dd><%= number_to_currency(summary.hourly_rate, precision: 0) %>/h</dd>
-  </dl>
-
-  <h2 class="text-xl font-semibold mt-6">Tasks</h2>
-  <table>
-    <thead>
-      <tr><th>#</th><th>Task</th><th>Complexity</th><th>Hours</th><th>Cost</th></tr>
-    </thead>
-    <tbody>
-      <% result.tasks.each do |task| %>
-        <tr>
-          <td><%= task.task_id %></td>
-          <td>
-            <strong><%= task.name %></strong>
-            <p><%= task.description %></p>
-            <ul>
-              <% task.includes.each do |item| %><li><%= item %></li><% end %>
-            </ul>
-          </td>
-          <td><%= task.complexity %></td>
-          <td><%= task.estimated_hours %></td>
-          <td><%= number_to_currency(task.estimated_cost_usd, precision: 0) %></td>
-        </tr>
+  <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
+    <h1 class="text-3xl font-bold tracking-tighter text-white"><%= result.project_name %></h1>
+    <div class="flex items-center gap-2">
+      <span data-badge="prompt" class="text-xs font-bold tracking-tight uppercase bg-brand text-ink-dark px-2 py-1 rounded">prompt <%= @response.prompt_version %></span>
+      <% if @response.cached %>
+        <span data-badge="cached" class="text-xs font-bold tracking-tight uppercase bg-success-light text-ink-dark px-2 py-1 rounded">cached</span>
       <% end %>
-    </tbody>
-  </table>
+    </div>
+  </div>
+
+  <p class="text-white/90 leading-relaxed mb-8 whitespace-pre-line"><%= result.meeting_summary %></p>
+
+  <dl class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
+    <div class="p-4 rounded-md bg-ink/30 border border-white/10">
+      <dt class="text-xs uppercase tracking-tight text-white/50 font-bold">Total hours</dt>
+      <dd data-stat="total-hours" class="text-2xl font-bold tracking-tighter text-white mt-1"><%= number_with_delimiter(summary.total_hours) %> h</dd>
+    </div>
+    <div class="p-4 rounded-md bg-ink/30 border border-white/10">
+      <dt class="text-xs uppercase tracking-tight text-white/50 font-bold">Total cost (USD)</dt>
+      <dd data-stat="total-cost" class="text-2xl font-bold tracking-tighter text-white mt-1"><%= number_to_currency(summary.total_cost_usd, precision: 0) %></dd>
+    </div>
+    <div class="p-4 rounded-md bg-ink/30 border border-white/10">
+      <dt class="text-xs uppercase tracking-tight text-white/50 font-bold">Duration (weeks)</dt>
+      <dd data-stat="duration" class="text-2xl font-bold tracking-tighter text-white mt-1"><%= summary.estimated_duration_weeks %></dd>
+    </div>
+    <div class="p-4 rounded-md bg-ink/30 border border-white/10">
+      <dt class="text-xs uppercase tracking-tight text-white/50 font-bold">Team size</dt>
+      <dd data-stat="team-size" class="text-base font-bold text-white mt-1"><%= summary.team_size %></dd>
+    </div>
+  </dl>
+  <p class="text-sm text-white/60 mb-8">Hourly rate: <span data-stat="hourly-rate"><%= number_to_currency(summary.hourly_rate, precision: 0) %>/h</span></p>
+
+  <h2 class="text-xl font-bold tracking-tight text-white mb-3">Tasks</h2>
+  <div class="rounded-md border border-white/10 overflow-x-auto mb-8">
+    <table class="w-full text-sm">
+      <thead class="bg-ink/40 text-white/70">
+        <tr>
+          <th scope="col" class="text-left p-3 font-bold tracking-tight">ID / Task</th>
+          <th scope="col" class="text-left p-3 font-bold tracking-tight">Complexity</th>
+          <th scope="col" class="text-right p-3 font-bold tracking-tight">Hours</th>
+          <th scope="col" class="text-right p-3 font-bold tracking-tight">Cost (USD)</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-white/10">
+        <% result.tasks.each do |task| %>
+          <tr>
+            <td class="p-3 align-top">
+              <div class="font-bold text-white"><span class="text-white/50 tabular-nums"><%= task.task_id %>.</span> <%= task.name %></div>
+              <div class="text-white/60 text-xs mt-0.5"><%= task.description %></div>
+              <% if task.includes.any? %>
+                <ul class="mt-2 list-disc list-inside text-xs text-white/50">
+                  <% task.includes.each do |item| %><li><%= item %></li><% end %>
+                </ul>
+              <% end %>
+            </td>
+            <td class="p-3 align-top whitespace-nowrap">
+              <% tone = { "Simple" => "bg-success-light text-ink-dark", "Medium" => "bg-brand text-ink-dark", "High" => "bg-red-300 text-ink-dark" }.fetch(task.complexity.to_s, "bg-white/20 text-white") %>
+              <span data-complexity="<%= task.complexity %>" class="text-xs font-bold tracking-tight uppercase px-2 py-1 rounded <%= tone %>"><%= task.complexity %></span>
+            </td>
+            <td class="p-3 text-right align-top text-white/90 tabular-nums"><%= number_with_delimiter(task.estimated_hours) %></td>
+            <td class="p-3 text-right align-top text-white/90 tabular-nums"><%= number_to_currency(task.estimated_cost_usd, precision: 0) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+      <tfoot class="bg-ink/40 font-bold text-white">
+        <tr>
+          <th scope="row" colspan="2" class="text-left p-3">Total</th>
+          <td class="p-3 text-right tabular-nums"><%= number_with_delimiter(summary.total_hours) %></td>
+          <td class="p-3 text-right tabular-nums"><%= number_to_currency(summary.total_cost_usd, precision: 0) %></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
 
   <% if summary.assumptions.any? %>
-    <h2 class="text-xl font-semibold mt-6">Assumptions</h2>
-    <ul>
+    <h2 class="text-xl font-bold tracking-tight text-white mb-3">Assumptions</h2>
+    <ul class="list-disc list-inside space-y-1 text-sm text-white/80 mb-8">
       <% summary.assumptions.each do |assumption| %><li><%= assumption %></li><% end %>
     </ul>
   <% end %>
 
-  <p class="mt-6"><%= link_to "New estimation", new_estimation_path %> · <%= link_to "History", estimations_path %></p>
-</section>
+  <div class="mt-10 pt-6 border-t border-white/10 flex gap-6">
+    <%= link_to "New estimation", new_estimation_path, class: "text-brand font-bold hover:text-brand-soft tracking-tight" %>
+    <%= link_to "History", estimations_path, class: "text-white/70 hover:text-brand-soft tracking-tight" %>
+  </div>
+</div>
