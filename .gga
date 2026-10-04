@@ -1,0 +1,7 @@
+# Gentleman Guardian Angel Configuration (repo root, Python project)
+PROVIDER="claude"
+FILE_PATTERNS="*.py"
+EXCLUDE_PATTERNS="test_*.py,*_test.py,conftest.py"
+RULES_FILE="AGENTS.md"
+STRICT_MODE="true"
+TIMEOUT="300"
