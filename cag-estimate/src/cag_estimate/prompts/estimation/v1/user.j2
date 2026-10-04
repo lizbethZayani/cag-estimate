@@ -1,0 +1,18 @@
+Based on the following project description, provide a detailed project estimation with task breakdown, hours, and costs.
+
+<project_description>
+{{ description }}
+</project_description>
+
+INSTRUCTIONS:
+- Use the hourly rate of ${{ hourly_rate }}/hour for cost calculations
+- Be specific and realistic with estimates
+- Ensure all tasks are clearly defined with measurable deliverables
+- Include tasks for testing, documentation, and deployment
+- Provide assumptions made during estimation
+
+{% if output_format == "markdown" %}
+Respond only with the Markdown content described in the system prompt, no additional commentary.
+{% else %}
+Return only valid JSON, no additional text.
+{% endif %}

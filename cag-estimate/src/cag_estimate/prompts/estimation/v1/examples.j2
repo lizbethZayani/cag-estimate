@@ -1,0 +1,9 @@
+<examples>
+Reference estimations to use as benchmarks for scope, hours and cost:
+{% for example in examples %}
+
+<example index="{{ loop.index }}">
+{{ example | pretty_json }}
+</example>
+{% endfor %}
+</examples>
