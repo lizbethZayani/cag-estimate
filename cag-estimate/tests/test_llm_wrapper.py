@@ -323,3 +323,32 @@ def test_structured_provider_failure_propagates(cache: EstimationCache) -> None:
         wrapper.complete_structured(system_prompt="s", user_message="u", response_model=Out)
 
     assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+def test_structured_inserts_history_between_system_and_user(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache)
+    wrapper.router = FakeRouter([_tool_response({"n": 1})])
+    history = [
+        {"role": "user", "content": "first question"},
+        {"role": "assistant", "content": "first answer"},
+    ]
+
+    wrapper.complete_structured(
+        system_prompt="s", user_message="u", response_model=Out, history=history
+    )
+
+    messages = wrapper.router.calls[0]["messages"]
+    assert [m["role"] for m in messages[:4]] == ["system", "user", "assistant", "user"]
+    assert messages[1]["content"] == "first question"
+    assert messages[2]["content"] == "first answer"
+    assert messages[3]["content"] == "u"
+
+
+def test_structured_without_history_keeps_system_then_user(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache)
+    wrapper.router = FakeRouter([_tool_response({"n": 1})])
+
+    wrapper.complete_structured(system_prompt="s", user_message="u", response_model=Out)
+
+    messages = wrapper.router.calls[0]["messages"]
+    assert [m["role"] for m in messages] == ["system", "user"]

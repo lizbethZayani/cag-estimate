@@ -241,6 +241,7 @@ class LLMWrapper:
         model_override: str | None = None,
         max_tokens: int = 4000,
         max_retries: int = 3,
+        history: list[dict[str, str]] | None = None,
     ) -> tuple[T, dict[str, Any]]:
         """Run the LLM through Instructor and return ``(model_instance, meta)``.
 
@@ -249,6 +250,9 @@ class LLMWrapper:
         propagates. The call goes through the same dispatch as ``complete()``,
         so the Router's primary -> fallback behaviour is preserved. Results are
         not cached here; the service layer caches the validated model.
+
+        ``history`` holds prior ``user``/``assistant`` messages, in order; they
+        are inserted between the system prompt and the new user message.
 
         ``meta`` has ``model``, ``provider``, ``latency_ms``, ``usage`` and
         ``cost_breakdown``, shaped like the ``complete()`` result.
@@ -260,7 +264,7 @@ class LLMWrapper:
         t0 = time.perf_counter()
         try:
             parsed, raw = client.chat.completions.create_with_completion(
-                messages=_build_messages(system_prompt, user_message),
+                messages=_build_messages(system_prompt, user_message, history),
                 response_model=response_model,
                 max_tokens=max_tokens,
                 max_retries=max_retries,
@@ -375,9 +379,12 @@ class _StreamState:
         }
 
 
-def _build_messages(system_prompt: str, user_message: str) -> list[dict[str, str]]:
+def _build_messages(
+    system_prompt: str, user_message: str, history: list[dict[str, str]] | None = None
+) -> list[dict[str, str]]:
     return [
         {"role": "system", "content": system_prompt},
+        *(history or []),
         {"role": "user", "content": user_message},
     ]
 
