@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from cag_estimate.config import get_settings
 from cag_estimate.logging_config import configure_logging
-from cag_estimate.routers import estimations
+from cag_estimate.routers import estimations, sessions
 
 
 # Health check response model
@@ -57,6 +57,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(estimations.router)
+app.include_router(sessions.router)
 
 
 @app.get("/health", response_model=HealthStatus, status_code=200)

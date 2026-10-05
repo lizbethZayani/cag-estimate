@@ -31,7 +31,7 @@ REJECTION_MESSAGES = {
 }
 
 
-def _rejection_body(reason: str) -> dict[str, str]:
+def rejection_body(reason: str) -> dict[str, str]:
     return {"reason": reason, "message": REJECTION_MESSAGES[reason]}
 
 
@@ -63,7 +63,7 @@ def estimate_project(
         return service.estimate(request)
     except InputGuardrailViolation as exc:
         log.info("estimate_rejected", reason=exc.reason)
-        return JSONResponse(status_code=400, content=_rejection_body(exc.reason))
+        return JSONResponse(status_code=400, content=rejection_body(exc.reason))
     except Exception as exc:
         log.error("estimate_failed", error_type=type(exc).__name__, error=str(exc))
         raise HTTPException(status_code=502, detail=UPSTREAM_ERROR) from exc
@@ -87,7 +87,7 @@ def estimate_project_stream(request: EstimationRequest, service: Service) -> Str
             yield _sse(_done_event(result))
         except InputGuardrailViolation as exc:
             log.info("estimate_stream_rejected", reason=exc.reason)
-            yield _sse({"type": "error", **_rejection_body(exc.reason)})
+            yield _sse({"type": "error", **rejection_body(exc.reason)})
         except Exception as exc:  # noqa: BLE001 - SSE boundary: never leak, always emit error event
             log.error("estimate_stream_failed", error_type=type(exc).__name__, error=str(exc))
             yield _sse({"type": "error", "message": UPSTREAM_ERROR})
