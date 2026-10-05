@@ -1,5 +1,6 @@
 """Offline unit tests for the in-memory session state."""
 
+import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
@@ -215,3 +216,19 @@ def test_get_session_store_is_a_singleton_honouring_settings():
     get_session_store.cache_clear()
     assert get_session_store() is get_session_store()
     get_session_store.cache_clear()
+
+
+def test_session_exposes_a_non_reentrant_lock_that_serializes_holders():
+    session = Session("s1", render)
+    entered = threading.Event()
+
+    def contender() -> None:
+        with session.lock:
+            entered.set()
+
+    with session.lock:
+        thread = threading.Thread(target=contender)
+        thread.start()
+        assert not entered.wait(timeout=0.1)
+    thread.join(timeout=2)
+    assert entered.is_set()

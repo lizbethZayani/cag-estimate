@@ -78,6 +78,9 @@ class Session:
         self.history = ConversationHistory(self.metadata, system_prompt_provider, max_turns)
         self.created_at = datetime.now(UTC)
         self.updated_at = self.created_at
+        # Held by callers for a whole read-modify-write (e.g. one estimate) so
+        # concurrent requests on the same session cannot interleave their turns.
+        self.lock = threading.Lock()
 
     def touch(self) -> None:
         self.updated_at = datetime.now(UTC)

@@ -14,6 +14,7 @@ from cag_estimate.prompts import render_system_prompt
 from cag_estimate.services.cache import get_cache
 from cag_estimate.services.estimation import EstimationService
 from cag_estimate.services.llm_wrapper import get_llm_wrapper
+from cag_estimate.services.session_estimation import SessionEstimationService
 from cag_estimate.services.sessions import SessionStore
 
 log = structlog.get_logger()
@@ -81,3 +82,9 @@ def get_estimation_service() -> EstimationService:
     return EstimationService(
         get_llm_wrapper(), get_cache(), build_moderation_client(), get_semantic_cache()
     )
+
+
+@lru_cache
+def get_session_estimation_service() -> SessionEstimationService:
+    """Process-wide session estimation service (no cache: it bypasses both caches)."""
+    return SessionEstimationService(get_llm_wrapper(), build_moderation_client())

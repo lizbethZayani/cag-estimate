@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, Field, field_validator
 
+from cag_estimate.schemas.estimation import EstimationResponse
+
 
 def _merge_unique(current: list[str], extra: list[str]) -> list[str]:
     """Union preserving first-seen order and original casing (case-insensitive)."""
@@ -47,3 +49,21 @@ class ProjectMetadata(BaseModel):
         self.mentioned_technologies = _merge_unique(
             self.mentioned_technologies, update.mentioned_technologies
         )
+
+
+class SessionCreated(BaseModel):
+    """Response of ``POST /sessions``."""
+
+    session_id: str
+
+
+class SessionEstimationResponse(EstimationResponse):
+    """A regular estimation plus the session context it was produced in.
+
+    ``cached`` is always False: session estimates bypass the caches.
+    """
+
+    session_id: str
+    project_metadata: ProjectMetadata
+    turns: int
+    attachments: list[str] = Field(default_factory=list)
