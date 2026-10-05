@@ -10,6 +10,7 @@ from openai import OpenAI
 from cag_estimate.cache.semantic import EstimationSemanticCache
 from cag_estimate.cache.vectorizer import LazyOpenAIVectorizer
 from cag_estimate.config import get_settings
+from cag_estimate.prompts import render_system_prompt
 from cag_estimate.services.cache import get_cache
 from cag_estimate.services.estimation import EstimationService
 from cag_estimate.services.llm_wrapper import get_llm_wrapper
@@ -68,7 +69,9 @@ def get_session_store() -> SessionStore:
     """Process-wide in-memory session store (volatile: lost on restart)."""
     settings = get_settings()
     return SessionStore(
-        max_turns=settings.session_max_turns, max_sessions=settings.session_max_sessions
+        system_prompt_provider=render_system_prompt,
+        max_turns=settings.session_max_turns,
+        max_sessions=settings.session_max_sessions,
     )
 
 
