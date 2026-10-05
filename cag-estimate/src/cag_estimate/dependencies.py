@@ -13,6 +13,7 @@ from cag_estimate.config import get_settings
 from cag_estimate.services.cache import get_cache
 from cag_estimate.services.estimation import EstimationService
 from cag_estimate.services.llm_wrapper import get_llm_wrapper
+from cag_estimate.services.sessions import SessionStore
 
 log = structlog.get_logger()
 
@@ -60,6 +61,15 @@ def build_semantic_cache() -> EstimationSemanticCache | None:
 def get_semantic_cache() -> EstimationSemanticCache | None:
     """Process-wide semantic cache (None when unavailable)."""
     return build_semantic_cache()
+
+
+@lru_cache
+def get_session_store() -> SessionStore:
+    """Process-wide in-memory session store (volatile: lost on restart)."""
+    settings = get_settings()
+    return SessionStore(
+        max_turns=settings.session_max_turns, max_sessions=settings.session_max_sessions
+    )
 
 
 @lru_cache

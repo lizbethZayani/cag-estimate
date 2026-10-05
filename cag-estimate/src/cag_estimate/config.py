@@ -2,6 +2,9 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings
 
+DEFAULT_SESSION_MAX_TURNS = 6
+DEFAULT_SESSION_MAX_SESSIONS = 1000
+
 
 class Settings(BaseSettings):
     anthropic_api_key: str
@@ -22,6 +25,10 @@ class Settings(BaseSettings):
     # Log would-be hits without serving them (to calibrate the threshold).
     semantic_cache_log_only: bool = False
     semantic_cache_enabled: bool = True
+    # Sliding window: one turn = one user + one assistant message.
+    session_max_turns: int = DEFAULT_SESSION_MAX_TURNS
+    # Safety cap for the in-memory session store (LRU eviction beyond it).
+    session_max_sessions: int = DEFAULT_SESSION_MAX_SESSIONS
     app_env: str = "development"
     log_level: str = "DEBUG"
 
