@@ -8,8 +8,6 @@ wrong-context answers (and would hide the memory behaviour being exercised).
 
 from typing import Any
 
-import structlog
-
 from cag_estimate.guardrails.input import check_input
 from cag_estimate.guardrails.output import enforce_output
 from cag_estimate.prompts import render_estimation_prompt
@@ -20,8 +18,6 @@ from cag_estimate.services.estimation import MAX_TOKENS, PROMPT_VERSION
 from cag_estimate.services.llm_wrapper import LLMWrapper
 from cag_estimate.services.metadata_extractor import extract_metadata
 from cag_estimate.services.sessions import Session
-
-log = structlog.get_logger()
 
 MAX_HISTORY_TRANSCRIPT_CHARS = 4000
 _TRUNCATION_MARKER = "\n[... transcript truncated in conversation history ...]"
@@ -71,7 +67,7 @@ class SessionEstimationService:
                 prompt_version=PROMPT_VERSION,
                 cached=False,
                 session_id=session.session_id,
-                project_metadata=session.metadata,
+                project_metadata=session.metadata.model_copy(deep=True),
                 turns=len(session.history),
                 attachments=[attachment.filename for attachment in attachments],
             )

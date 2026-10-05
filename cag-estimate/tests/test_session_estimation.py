@@ -181,3 +181,12 @@ def test_concurrent_estimates_on_one_session_are_serialized():
 
     assert wrapper.max_active == 1
     assert len(session.history) == 4
+
+
+def test_response_metadata_is_a_snapshot_not_the_live_session_object():
+    session = make_session()
+
+    response = SessionEstimationService(FakeWrapper()).estimate(session, "Build a portal", [], 40)
+
+    assert response.project_metadata == session.metadata
+    assert response.project_metadata is not session.metadata
