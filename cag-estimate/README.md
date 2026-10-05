@@ -12,9 +12,10 @@ CAG Estimate uses the **Context-Augmented Generation (CAG)** architecture patter
 - Project timeline estimates
 - Key assumptions and dependencies
 
-The project ships with two ways to use it:
+The project ships with three ways to use it:
 - **FastAPI backend** (`/api/v1/estimate`, `/api/v1/estimate/stream`) — see [API Documentation](#api-documentation)
 - **Streamlit chat UI** (`src/ui/streamlit_app.py`) — a conversational interface with real-time, token-by-token streaming; see [💬 Streamlit Chat Interface](#-streamlit-chat-interface)
+- **Rails web UI** (`../estimator-web/`) — a form-based UI over the structured endpoint; see [Web UI (Rails)](#web-ui-rails)
 
 ## 📦 What's Included
 
@@ -181,7 +182,7 @@ cag-estimate/
 ├── session4/NOTES.md                    # Session 4 changes vs the reference repo
 ├── run_streamlit.sh                     # Launches the chat UI
 ├── Dockerfile                           # API container image
-├── docker-compose.yml                   # api + redis-stack
+├── docker-compose.yml                   # api + redis-stack + postgres + estimator-web
 ├── docker-compose.override.yml          # Dev overrides (hot-reload)
 ├── DOCKER.md / VERIFICATION.md          # Docker and verification guides
 └── pyproject.toml                       # Project configuration
@@ -336,6 +337,17 @@ docker-compose up
 ```
 
 Open **http://localhost:8501** in your browser.
+
+## Web UI (Rails)
+
+A Rails 8 web UI lives in [`../estimator-web/`](../estimator-web/README.md). It calls the structured `POST /api/v1/estimate` endpoint (not the streaming one), shows the estimate (summary, task table, totals) and keeps a history of successful estimates in Postgres. The Streamlit chat above, with its streaming markdown mode, is still available.
+
+```bash
+# from this directory
+docker compose up -d --build estimator-web postgres api redis
+```
+
+Open **http://localhost:3000**. See the [estimator-web README](../estimator-web/README.md) for the architecture, tests and known notes, and [DOCKER.md](./DOCKER.md) for the compose services.
 
 ## Getting Started
 

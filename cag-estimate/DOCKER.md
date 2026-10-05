@@ -113,7 +113,36 @@ docker-compose build --no-cache api
   - Network isolation
   - Non-root user (appuser, uid 1000)
 
+- **Service:** `postgres` (container `estimator-web-postgres`)
+  - Image: `postgres:16-alpine`; user, password `postgres`, database `estimator_web_development`
+  - **Not published to the host**; reachable only on the compose network (`postgres:5432`)
+  - Data volume: `estimator-web-pg-data`
+  - Stores the Rails UI estimation history
+- **Service:** `estimator-web` (container `estimator-web`)
+  - Built from `../estimator-web`; port `3000:3000`
+  - `ESTIMATOR_API_BASE_URL=http://api:8000`, `ESTIMATOR_AI_TIMEOUT=180`, `RAILS_ENV=development`
+  - Waits for `postgres` to be healthy; runs `bin/rails db:prepare && bin/dev`
+  - Source bind-mounted from `../estimator-web`; named volume `estimator-web-bundle` holds the installed gems (`/usr/local/bundle`)
+  - Does not depend on `api` at startup; estimates fail with a 503 message until the API is up
+
 This image (`redis-stack`) bundles RedisInsight on port 8001, but the compose file only publishes `6379`. To use the RedisInsight UI add `- "8001:8001"` to the `redis` ports.
+
+### Rails web UI
+
+Start (or rebuild) the UI with its dependencies:
+```bash
+docker compose up -d --build estimator-web postgres api redis
+```
+
+Open http://localhost:3000 (UI) and http://localhost:8000 (API). Stop only the UI and its database, or everything:
+```bash
+docker compose stop estimator-web postgres
+docker compose down          # all services; add -v to also delete the volumes (this erases the estimation history)
+```
+
+Run its tests and lint with `docker compose exec estimator-web bin/rails test` (also `bin/rubocop`, `bin/brakeman`). Rails development mode does not reload initializers, so run `docker compose restart estimator-web` after changing `config/initializers/*` or env vars. See [../estimator-web/README.md](../estimator-web/README.md).
+
+If host port `6379` is already in use (for example by another Redis), the `redis` service fails to start because this compose file publishes `6379:6379`. Create a compose override file that remaps it (for example a `docker-compose.ports.yml` containing `services: { redis: { ports: !override ["6380:6379"] } }`; the `!override` tag needs a recent Docker Compose v2, otherwise a plain list would add a second mapping instead of replacing `6379:6379`) and pass it with `docker compose -f docker-compose.yml -f docker-compose.ports.yml ...`. The `api` container still reaches Redis at `redis://redis:6379/0` over the compose network.
 
 ### Development Overrides (`docker-compose.override.yml`)
 
@@ -272,6 +301,8 @@ kompose convert -f docker-compose.yml
 
 - **redis** - Redis Stack (exact cache + semantic cache)
 - **api** - CAG Estimate FastAPI application
+- **postgres** - PostgreSQL 16 for the Rails UI history (not published to the host)
+- **estimator-web** - Rails UI on port 3000
 
 ## Example: Full Workflow
 

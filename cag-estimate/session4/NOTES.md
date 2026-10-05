@@ -26,6 +26,17 @@ What was added to close the Session 4 gap against the reference repo (`ai-engine
 - **Hours validation:** exact sum equality between task hours and `total_hours` (the old test-only validator allowed 15%); the complexity ranges are Simple 4-24, Medium 10-64, High 16-112.
 - **`.env.example` not updated:** `EMBEDDING_MODEL` and `SEMANTIC_CACHE_*` are documented in the README and `DOCKER.md` instead; `docker-compose.yml` passes them through to the `api` container.
 
+## Rails UI port (`estimator-web/`)
+
+The Rails 8 UI from the reference repo (`ai-engineering@session_4_live`, `estimator-web/`) was ported to the repo root as `estimator-web/` and adapted to this project's API. See [`../../estimator-web/README.md`](../../estimator-web/README.md).
+
+- **Contract:** the request is `{transcription, hourly_rate}` and the result is `ProjectEstimation` with tasks in hours and USD (not the reference's EUR/phases/weeks schema). Models were renamed and reshaped accordingly (`Task`, `EstimationSummary`, `EstimationResult`, `EstimationResponse`).
+- **400 body:** the guardrail `reason` and `message` are top-level in our API, not nested under `detail` as in the reference; the client reads them from the top level. 422 carries a `detail` list and 502 a generic message.
+- **Neutral branding:** "CAG Estimate" naming; the reference's LIDR logo and favicon were not copied.
+- **English copy:** all UI text is in English.
+- **Docker-only runtime:** `estimator-web` and a `postgres` service were added to `docker-compose.yml` (Ruby 3.4.4 image; the host only has an older system Ruby). The UI reaches the API at `http://api:8000`.
+- **Streamlit kept:** the Streamlit chat and the streaming endpoint are unchanged; the Rails UI uses only the structured endpoint.
+
 ## Known gaps
 
 - The semantic cache was verified only against a faked RediSearch index; real Redis Stack behaviour is checked manually (see `VERIFICATION.md`).
