@@ -42,7 +42,7 @@ import structlog
 from litellm import Router
 from pydantic import BaseModel
 
-from cag_estimate.config import get_settings
+from cag_estimate.config import DEFAULT_STRUCTURED_MAX_TOKENS, get_settings
 from cag_estimate.services.cache import EstimationCache, get_cache
 
 log = structlog.get_logger()
@@ -98,6 +98,7 @@ class LLMWrapper:
         timeout: int,
         num_retries: int,
         cache: EstimationCache,
+        structured_max_tokens: int = DEFAULT_STRUCTURED_MAX_TOKENS,
     ) -> None:
         self.anthropic_api_key = anthropic_api_key
         self.openai_api_key = openai_api_key
@@ -106,6 +107,7 @@ class LLMWrapper:
         self.timeout = timeout
         self.num_retries = num_retries
         self.cache = cache
+        self.structured_max_tokens = structured_max_tokens
 
         # Two distinct model_name groups, not two deployments under the same
         # name: LiteLLM's Router load-balances across deployments that share
@@ -239,7 +241,7 @@ class LLMWrapper:
         user_message: str,
         response_model: type[T],
         model_override: str | None = None,
-        max_tokens: int = 4000,
+        max_tokens: int | None = None,
         max_retries: int = 3,
         history: list[dict[str, str]] | None = None,
     ) -> tuple[T, dict[str, Any]]:
@@ -251,6 +253,9 @@ class LLMWrapper:
         so the Router's primary -> fallback behaviour is preserved. Results are
         not cached here; the service layer caches the validated model.
 
+        ``max_tokens`` defaults to the configured structured limit
+        (``LLM_STRUCTURED_MAX_TOKENS``); an explicit value wins.
+
         ``history`` holds prior ``user``/``assistant`` messages, in order; they
         are inserted between the system prompt and the new user message.
 
@@ -258,8 +263,9 @@ class LLMWrapper:
         ``cost_breakdown``, shaped like the ``complete()`` result.
         """
         requested_model = model_override or self.primary_model
+        max_tokens = max_tokens or self.structured_max_tokens
         call_logger = log.bind(model=requested_model, response_model=response_model.__name__)
-        call_logger.info("llm_call_started", mode="structured")
+        call_logger.info("llm_call_started", mode="structured", max_tokens=max_tokens)
         client = instructor.from_litellm(self._structured_completion(model_override))
         t0 = time.perf_counter()
         try:
@@ -491,4 +497,5 @@ def get_llm_wrapper() -> LLMWrapper:
         timeout=settings.llm_timeout_seconds,
         num_retries=settings.llm_num_retries,
         cache=get_cache(),
+        structured_max_tokens=settings.llm_structured_max_tokens,
     )

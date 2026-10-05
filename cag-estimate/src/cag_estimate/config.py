@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 
 DEFAULT_SESSION_MAX_TURNS = 6
 DEFAULT_SESSION_MAX_SESSIONS = 1000
+DEFAULT_STRUCTURED_MAX_TOKENS = 8192
 
 
 class Settings(BaseSettings):
@@ -14,6 +15,8 @@ class Settings(BaseSettings):
     fallback_model: str = "gpt-4o-mini"
     llm_timeout_seconds: int = 60
     llm_num_retries: int = 2
+    # Output budget for structured (Instructor) calls; too low truncates large estimates.
+    llm_structured_max_tokens: int = DEFAULT_STRUCTURED_MAX_TOKENS
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl_seconds: int = 86400
     embedding_model: str = "text-embedding-3-small"

@@ -502,6 +502,7 @@ The checks below are now enforced in the code: the schema validators (`schemas/e
 | `FALLBACK_MODEL` | Fallback model | `gpt-4o-mini` |
 | `LLM_TIMEOUT_SECONDS` | LLM call timeout | `60` |
 | `LLM_NUM_RETRIES` | Router retries | `2` |
+| `LLM_STRUCTURED_MAX_TOKENS` | Output token limit for structured (estimate) calls | `8192` |
 | `REDIS_URL` | Redis (Stack) URL | `redis://localhost:6379/0` |
 | `CACHE_TTL_SECONDS` | Exact-cache TTL | `86400` |
 | `EMBEDDING_MODEL` | Embedding model for the semantic cache | `text-embedding-3-small` |
