@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= content_for(:title) || "CAG Estimate" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1F2937">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body class="font-sans antialiased text-white bg-ink-dark min-h-screen flex flex-col">
+    <header class="border-b border-white/10">
+      <div class="max-w-5xl mx-auto px-4 py-5 flex items-center gap-6">
+        <span class="text-white font-bold tracking-tight text-lg">CAG Estimate</span>
+        <nav class="ml-auto flex items-center gap-4 text-sm">
+          <%= link_to "New estimation", new_estimation_path, class: "text-white/80 hover:text-brand-soft font-bold tracking-tight" %>
+          <%= link_to "History", estimations_path, class: "text-white/80 hover:text-brand-soft font-bold tracking-tight" %>
+          <%= yield :nav %>
+        </nav>
+      </div>
+    </header>
+
+    <main class="flex-1">
+      <%= yield %>
+    </main>
+
+    <footer class="border-t border-white/10">
+      <div class="max-w-5xl mx-auto px-4 py-4 text-sm text-white/50 text-center">
+        CAG Estimate demo
+      </div>
+    </footer>
+  </body>
+</html>

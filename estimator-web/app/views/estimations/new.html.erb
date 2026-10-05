@@ -1,0 +1,12 @@
+<div class="max-w-2xl mx-auto py-12 px-4">
+  <h1 class="text-3xl font-bold tracking-tighter mb-8 text-white">New estimation</h1>
+
+  <% if flash[:alert].present? %>
+    <div role="alert" data-kind="<%= flash[:alert_kind] || "rejected" %>"
+         class="mb-6 p-4 rounded-md border data-[kind=rejected]:bg-brand/15 data-[kind=rejected]:border-brand data-[kind=rejected]:text-brand-soft data-[kind=unavailable]:bg-red-500/15 data-[kind=unavailable]:border-red-400 data-[kind=unavailable]:text-red-200">
+      <%= flash[:alert] %>
+    </div>
+  <% end %>
+
+  <%= render "form", request: @request %>
+</div>

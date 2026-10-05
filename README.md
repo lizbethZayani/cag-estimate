@@ -6,7 +6,7 @@
 
 **➡️ [See the full project documentation →](./cag-estimate/README.md)**
 
-The actual API implementation and comprehensive documentation is located in the `cag-estimate/` folder.
+The actual API implementation and comprehensive documentation is located in the `cag-estimate/` folder. A Rails web UI for the API is in [`estimator-web/`](./estimator-web/README.md).
 
 ## Quick Overview
 

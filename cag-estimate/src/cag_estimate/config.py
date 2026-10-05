@@ -1,5 +1,6 @@
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -12,6 +13,15 @@ class Settings(BaseSettings):
     llm_num_retries: int = 2
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl_seconds: int = 86400
+    embedding_model: str = "text-embedding-3-small"
+    # Needed only for embedding models missing from the built-in dimensions map.
+    embedding_dims: int | None = None
+    # Single default for the semantic cache: cosine similarity needed to reuse an answer.
+    semantic_cache_threshold: float = 0.90
+    semantic_cache_ttl: int = 86400
+    # Log would-be hits without serving them (to calibrate the threshold).
+    semantic_cache_log_only: bool = False
+    semantic_cache_enabled: bool = True
     app_env: str = "development"
     log_level: str = "DEBUG"
 
@@ -21,7 +31,7 @@ class Settings(BaseSettings):
         case_sensitive = False
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """Get and cache settings instance."""
     return Settings()

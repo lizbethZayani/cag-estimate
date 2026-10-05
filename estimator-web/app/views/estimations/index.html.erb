@@ -1,0 +1,49 @@
+<div class="max-w-4xl mx-auto py-12 px-4">
+
+  <div class="flex items-center justify-between mb-8">
+    <h1 class="text-3xl font-bold tracking-tighter text-white">History</h1>
+    <%= link_to "New estimation", new_estimation_path,
+          class: "inline-flex items-center px-4 py-2 bg-brand text-ink-dark font-bold tracking-tight rounded-md hover:bg-brand-strong transition-colors" %>
+  </div>
+
+  <% if @estimations.empty? %>
+    <div data-empty-state class="p-6 rounded-md bg-ink/30 border border-white/10 text-white/70">
+      No estimations yet. Create the first one with the "New estimation" button.
+    </div>
+  <% else %>
+    <div class="rounded-md border border-white/10 overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-ink/40 text-white/70">
+          <tr>
+            <th scope="col" class="text-left p-3 font-bold tracking-tight">Date</th>
+            <th scope="col" class="text-right p-3 font-bold tracking-tight">Hours</th>
+            <th scope="col" class="text-right p-3 font-bold tracking-tight">Cost (USD)</th>
+            <th scope="col" class="text-left p-3 font-bold tracking-tight">Input</th>
+            <th scope="col" class="text-left p-3 font-bold tracking-tight">Prompt</th>
+            <th scope="col" class="p-3"><span class="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-white/10">
+          <% @estimations.each do |estimation| %>
+            <% summary = estimation.to_response.result.summary %>
+            <tr>
+              <td class="p-3 align-top text-white/70 tabular-nums whitespace-nowrap"><%= l estimation.created_at, format: :short %></td>
+              <td class="p-3 align-top text-right text-white/90 tabular-nums"><%= number_with_delimiter(summary.total_hours) %></td>
+              <td class="p-3 align-top text-right text-white/90 tabular-nums"><%= number_to_currency(summary.total_cost_usd, precision: 0) %></td>
+              <td class="p-3 align-top text-white/90"><%= estimation.transcription_preview %></td>
+              <td class="p-3 align-top whitespace-nowrap">
+                <span data-badge="prompt" class="text-xs font-bold tracking-tight uppercase bg-brand text-ink-dark px-2 py-1 rounded"><%= estimation.prompt_version %></span>
+                <% if estimation.cached %>
+                  <span data-badge="cached" class="ml-1 text-xs font-bold tracking-tight uppercase bg-success-light text-ink-dark px-2 py-1 rounded">cached</span>
+                <% end %>
+              </td>
+              <td class="p-3 align-top text-right whitespace-nowrap">
+                <%= link_to "View", estimation_path(estimation), class: "text-brand font-bold hover:text-brand-soft tracking-tight" %>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+</div>

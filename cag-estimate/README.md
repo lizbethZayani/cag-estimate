@@ -12,59 +12,44 @@ CAG Estimate uses the **Context-Augmented Generation (CAG)** architecture patter
 - Project timeline estimates
 - Key assumptions and dependencies
 
-The project ships with two ways to use it:
+The project ships with three ways to use it:
 - **FastAPI backend** (`/api/v1/estimate`, `/api/v1/estimate/stream`) — see [API Documentation](#api-documentation)
 - **Streamlit chat UI** (`src/ui/streamlit_app.py`) — a conversational interface with real-time, token-by-token streaming; see [💬 Streamlit Chat Interface](#-streamlit-chat-interface)
+- **Rails web UI** (`../estimator-web/`) — a form-based UI over the structured endpoint; see [Web UI (Rails)](#web-ui-rails)
 
-## 📦 Complete Setup Summary
-
-### ✅ What's Included
+## 📦 What's Included
 
 #### 1. **API Service** - `/api/v1/estimate`
 Context-Augmented Generation endpoint that:
-- Accepts meeting transcriptions as input
-- Returns detailed project estimations with task breakdown
-- Includes token usage and cost tracking
-- Uses Haiku 4.5 model (fast, affordable, $0.00006 per request)
+- Accepts a meeting transcription and an hourly rate
+- Runs input guardrails, an exact cache, a semantic cache, a structured LLM call and output guardrails (see [Request pipeline](#request-pipeline))
+- Returns a validated `ProjectEstimation` (tasks, hours, costs, summary) plus `prompt_version` and `cached`
 
 #### 2. **Configuration System**
-- `config.py` - Pydantic BaseSettings
-- Loads environment variables from `.env`
-- Settings: ANTHROPIC_API_KEY, LLM_PROVIDER, LLM_MODEL, APP_ENV, LOG_LEVEL
+- `config.py` - Pydantic `BaseSettings`, loads `.env`
+- Every setting is listed in [Configuration](#configuration)
 
 #### 3. **Context Examples**
-- Two complete reference estimation projects
-- Includes detailed Hyrox workout tracking app example
-- Used by LLM as benchmarks for better estimations
+- Reference estimation projects in `context/examples.py`
+- Rendered into the system prompt as benchmarks for the model
 
-#### 4. **LLM Service Integration**
-- CAG architecture pattern implementation
-- System prompt + reference examples + user transcription
-- Structured JSON output with full estimation details
+#### 4. **Prompt templates, schemas, guardrails, caches**
+- Versioned Jinja2 prompts, Pydantic schemas with validators, input/output guardrails, exact (Redis) and semantic (Redis Stack) caches; see [Architecture](#architecture)
 
 #### 5. **FastAPI Endpoints**
-- `POST /api/v1/estimate` - Main estimation endpoint
+- `POST /api/v1/estimate` - Structured estimation (JSON)
+- `POST /api/v1/estimate/stream` - Markdown estimation as Server-Sent Events
 - `GET /health` - Service health check
 - `GET /` - API information
 - `/docs` - Interactive Swagger UI
 - `/redoc` - ReDoc documentation
 
 #### 6. **Streamlit Chat Interface** - `src/ui/streamlit_app.py`
-A conversational, chat-app-style frontend for the estimation API:
-- WhatsApp/iMessage-style bubbles: your messages on the right (sky blue), assistant replies on the left (gray)
-- True real-time, token-by-token streaming — the LLM is prompted to respond in Markdown directly (not JSON), so every token can be shown to the user the instant it's generated
-- "🤖 Thinking" animated indicator while waiting for the first token
-- Sidebar dashboard: New Chat, Conversation Stats, Session Metrics (calls/tokens/cost), How to Use, and the CAG reference examples used as context
+- Two response modes (streaming markdown, structured table); see [Streamlit Chat Interface](#-streamlit-chat-interface)
 
-#### 7. **Verification Pipeline** ✅ *NEW*
-Five-stage validation for manager confidence:
-1. **Schema Validation** - Correct JSON structure
-2. **Business Logic** - Mathematical accuracy (±15% tolerance)
-3. **Reasonableness** - Values within realistic ranges
-4. **Quality Check** - Meaningful descriptions and documentation
-5. **Consistency** - Related fields logically align
-
-**Status:** ✅ All 9 verification tests passing
+#### 7. **Tests**
+- Offline unit tests (no network, no Redis): run with `uv run pytest`; see [Running tests](#running-tests)
+- `tests/verify_api.py` and `tests/test_verification.py` are the older verification scripts; see [VERIFICATION.md](VERIFICATION.md)
 
 ### 🚀 Quick Start
 
@@ -88,14 +73,11 @@ curl -X POST http://127.0.0.1:8001/api/v1/estimate \
   }'
 ```
 
-**4. Verify Results:**
-```bash
-.venv/bin/python tests/verify_api.py
-```
+**4. Verify Results:** follow the end-to-end checklist in [VERIFICATION.md](VERIFICATION.md).
 
 **5. Launch the Streamlit Chat UI:**
 
-The UI's `API_BASE_URL` is hardcoded to `http://localhost:8000`, so make sure the API is reachable there first (e.g. `docker-compose up`, or `uvicorn cag_estimate.main:app --host 0.0.0.0 --port 8000`) — not the `8001` dev port used in step 1 above.
+The UI reads the `API_BASE_URL` environment variable (default `http://localhost:8000`). Make sure the API is reachable there first (e.g. `docker-compose up`, or `uvicorn cag_estimate.main:app --host 0.0.0.0 --port 8000`), or set `API_BASE_URL` to the dev port used in step 1 (`API_BASE_URL=http://127.0.0.1:8001`).
 
 ```bash
 ./run_streamlit.sh
@@ -104,7 +86,7 @@ The UI's `API_BASE_URL` is hardcoded to `http://localhost:8000`, so make sure th
 ```
 Then open http://localhost:8501 and chat with the estimation assistant in real time.
 
-### 📊 Real Example: Grocery Price Comparison App (iOS)
+### 📊 Example: Grocery Price Comparison App (iOS, output from an earlier run)
 
 **Input (Meeting Transcription):**
 ```
@@ -161,13 +143,14 @@ API Cost: $0.000060 (less than a penny!)
 
 ✅ **Context-Augmented Generation** - LLM uses reference examples for consistent, high-quality estimations  
 ✅ **Real-Time Streaming Chat UI** - Token-by-token responses in a WhatsApp-style Streamlit interface  
-✅ **Automated Verification Pipeline** - Managers validate estimates with confidence scores  
+✅ **Validated Output** - Pydantic validators, guardrails and retries on every structured estimate  
+✅ **Two-level Cache** - Exact (Redis) and semantic (Redis Stack) cache, fail-soft  
 ✅ **Cost Transparent** - See exact token costs for every request  
 ✅ **Fast Results** - 3-5 seconds per estimation  
 ✅ **Affordable** - ~$0.00006 per request using Haiku 4.5  
 ✅ **Production Ready** - CORS enabled, error handling, comprehensive logging  
 ✅ **Well Documented** - README, verification guide, interactive API docs  
-✅ **Fully Tested** - 9 validation tests, API integration tests  
+✅ **Tested** - offline pytest suite (`uv run pytest`)  
 
 ### 📁 Project Structure
 
@@ -175,26 +158,33 @@ API Cost: $0.000060 (less than a penny!)
 cag-estimate/
 ├── src/
 │   ├── cag_estimate/
-│   │   ├── __init__.py
+│   │   ├── main.py                      # FastAPI app, logging setup
 │   │   ├── config.py                    # Pydantic BaseSettings
-│   │   ├── main.py                      # FastAPI app setup
-│   │   ├── routers/estimations.py       # /api/v1/estimate + /estimate/stream
-│   │   ├── services/llm_service.py      # LLM integration with CAG
+│   │   ├── logging_config.py            # structlog level from LOG_LEVEL
+│   │   ├── dependencies.py              # FastAPI dependency factories
+│   │   ├── routers/estimations.py       # HTTP only: /estimate + /estimate/stream
+│   │   ├── services/
+│   │   │   ├── estimation.py            # EstimationService (pipeline)
+│   │   │   ├── llm_wrapper.py           # LiteLLM Router + Instructor
+│   │   │   └── cache.py                 # Exact-match Redis cache
+│   │   ├── prompts/
+│   │   │   ├── loader.py                # render_estimation_prompt()
+│   │   │   └── estimation/v1/           # system.j2, user.j2, examples.j2
+│   │   ├── schemas/estimation.py        # Request/response models + validators
+│   │   ├── guardrails/                  # input.py, output.py, errors.py
+│   │   ├── cache/semantic.py            # Semantic cache (Redis Stack)
 │   │   └── context/examples.py          # Reference estimation examples
 │   └── ui/
-│       └── streamlit_app.py             # Real-time streaming chat UI
-├── tests/
-│   ├── test_verification.py             # Verification pipeline tests
-│   └── verify_api.py                    # API integration tests
-├── .streamlit/config.toml               # Streamlit UI configuration
+│       ├── streamlit_app.py             # Chat UI (streaming + structured)
+│       ├── estimate_client.py           # HTTP client with safe error messages
+│       └── view_models.py               # Pure presentation helpers
+├── tests/                               # Offline pytest suite (+ legacy verify_api.py)
+├── session4/NOTES.md                    # Session 4 changes vs the reference repo
 ├── run_streamlit.sh                     # Launches the chat UI
 ├── Dockerfile                           # API container image
-├── docker-compose.yml                   # API service (port 8000)
+├── docker-compose.yml                   # api + redis-stack + postgres + estimator-web
 ├── docker-compose.override.yml          # Dev overrides (hot-reload)
-├── README.md                            # This file
-├── VERIFICATION.md                      # Verification pipeline guide
-├── .env                                 # Environment variables (local)
-├── .env.example                         # Environment template
+├── DOCKER.md / VERIFICATION.md          # Docker and verification guides
 └── pyproject.toml                       # Project configuration
 ```
 
@@ -247,39 +237,91 @@ cag-estimate/
 └─────────────────────────────────────────────────────────┘
 ```
 
+### Layering
+
+```
+routers (HTTP only)  ->  services (orchestration)  ->  prompts / guardrails / cache / schemas
+```
+
+- `routers/estimations.py` parses the request, calls `EstimationService` and maps errors to HTTP status codes. It holds no business logic and no prompt text.
+- `services/estimation.py` runs the pipeline below. The LLM wrapper, caches and moderation client are injected (`dependencies.py`), so tests replace them with fakes.
+- `prompts/`, `guardrails/`, `cache/` and `schemas/` are leaf modules.
+
+### Request pipeline
+
+`POST /api/v1/estimate` runs these steps in order (`EstimationService.estimate`):
+
+1. **Input guardrail** (moderation, prompt injection, PII). A rejected input never reaches a cache or the LLM.
+2. **Exact cache** lookup (Redis, SHA-256 key of transcription, hourly rate, prompt version and model).
+3. **Semantic cache** lookup (Redis Stack vector search), only on an exact miss and only when enabled.
+4. **Render prompt** from the versioned Jinja2 templates and call the **structured LLM**.
+5. **Output guardrail** (leak check, total-cost correction).
+6. **Store** the result in both caches.
+
+A hit in step 2 or 3 returns `cached: true` and skips the LLM. `POST /api/v1/estimate/stream` runs only the input guardrail and then streams a Markdown answer; it does not use the caches, structured validation or the output guardrail.
+
+### Prompt templates
+
+Prompts live in `src/cag_estimate/prompts/estimation/<version>/` as Jinja2 files: `system.j2`, `user.j2` and the `examples.j2` partial included by `system.j2`. `render_estimation_prompt(request, version, output_format)` renders them with `StrictUndefined`, so a missing variable fails loudly. The allowed hour ranges, task counts and rate bounds in the prompt come from the schema constants. `output_format` is `"json"` (structured endpoint) or `"markdown"` (stream endpoint).
+
+To add a prompt version:
+
+1. Copy `prompts/estimation/v1/` to `prompts/estimation/v2/`.
+2. In `v2/system.j2`, change the include to `{% include "estimation/v2/examples.j2" %}` (it is hardcoded to `v1`).
+3. Edit the templates.
+4. Change `PROMPT_VERSION = "v1"` to `"v2"` in `services/estimation.py`. The version is part of the exact-cache key and the semantic-cache bucket, so v1 entries are not served for v2.
+
+Cache keys use the request inputs, not the rendered prompt text, so editing wording within a version keeps existing entries.
+
+### Structured output and validators
+
+`LLMWrapper.complete_structured()` calls the model through Instructor with `ProjectEstimation` as `response_model` and up to 3 retries; Instructor feeds validator errors back to the model. The call goes through the LiteLLM Router, so the primary-to-fallback model behaviour is kept. Validators in `schemas/estimation.py`:
+
+| Rule | Value |
+|------|-------|
+| Task count | 3 to 20 |
+| Total hours | 8 to 500, and exactly the sum of the task hours |
+| Hourly rate (in the result) | 30 to 150 |
+| Hours per complexity | Simple 4-24, Medium 10-64, High 16-112 |
+| `complexity` | `Simple`, `Medium` or `High` |
+
+If retries are exhausted, the exception reaches the router and becomes a generic 502.
+
+### Guardrails and HTTP mapping
+
+| Where | Reason / failure | HTTP result |
+|-------|------------------|-------------|
+| Input | `moderation` (OpenAI moderation, only when `OPENAI_API_KEY` is set; fails open on errors) | 400 `{"reason", "message"}` |
+| Input | `prompt_injection` (regexes for phrases such as "ignore previous instructions") | 400 |
+| Input | `pii` (email, IBAN, phone with 9-13 digits) | 400 |
+| Request body | missing or invalid fields (FastAPI validation) | 422 |
+| Output | system-prompt markers in the result | 502 |
+| Output | `total_cost_usd` different from `total_hours x hourly_rate` | corrected silently, logged |
+| LLM / structured retries exhausted / any other error | - | 502 with a generic message |
+
+Error bodies never echo the offending text or the exception message. On the stream endpoint a rejected input is a single SSE `error` event with HTTP 200 (carrying `reason`), so the Streamlit client can show the guardrail message.
+
+### Semantic cache
+
+`cache/semantic.py` stores results in a RediSearch vector index (redisvl, cosine distance, embeddings from `EMBEDDING_MODEL` through the OpenAI API). A stored result is reused only when the bucket (`<prompt_version>:<hourly_rate>`) matches exactly and the similarity is at least `SEMANTIC_CACHE_THRESHOLD` (default `0.90`).
+
+- **Requires Redis Stack** (RediSearch). The compose file uses `redis/redis-stack:7.4.0-v0`; plain `redis:7-alpine` does not work.
+- **Requires `OPENAI_API_KEY`** for the embeddings. Without it the semantic cache is disabled and the pipeline still works.
+- `SEMANTIC_CACHE_ENABLED=false` disables it. `SEMANTIC_CACHE_LOG_ONLY=true` logs would-be hits without serving them (useful to calibrate the threshold). `SEMANTIC_CACHE_TTL` is the entry lifetime in seconds.
+- **Fail-soft:** setup, lookup and store errors are logged and treated as a miss; they never fail a request.
+
 ## 💬 Streamlit Chat Interface
 
-A conversational frontend, located at [`src/ui/streamlit_app.py`](src/ui/streamlit_app.py), that talks to the FastAPI backend and streams the assistant's response live — no more waiting for a spinner and then seeing the whole answer appear at once.
+A conversational frontend, located at [`src/ui/streamlit_app.py`](src/ui/streamlit_app.py), that talks to the FastAPI backend. A **Response mode** radio in the sidebar picks one of two modes:
 
-### How it works
+- **Streaming (markdown)**: calls `POST /api/v1/estimate/stream` and shows the answer token by token (SSE). Token and cost metrics are shown after each answer.
+- **Structured (JSON)**: calls `POST /api/v1/estimate` and renders a summary, a task table (task, complexity, hours, cost) and the totals. A badge shows whether the answer was served from cache or freshly generated. No token or cost metrics are shown in this mode.
 
-```
-User types a message
-        ↓
-Sky-blue bubble appears on the right, instantly
-        ↓
-"🤖 Thinking …" bubble appears on the left (animated dots)
-        ↓
-POST /api/v1/estimate/stream (Server-Sent Events)
-        ↓
-Model streams Markdown directly (not JSON) — each token is
-already human-readable, so it can be shown the instant it arrives
-        ↓
-"Thinking" bubble is replaced, live, by the growing response text
-        ↓
-On completion: API metrics (tokens · cost) appended, sidebar updated
-```
+Both modes use an hourly rate of 40. Messages are kept in `st.session_state` (**New Chat** clears them); the backend is single-shot and does not receive the history as context. The API URL comes from the `API_BASE_URL` environment variable (default `http://localhost:8000`).
 
-**Why Markdown instead of JSON for streaming?** The `/api/v1/estimate` endpoint (used for programmatic/API access) still returns structured JSON. But `/api/v1/estimate/stream` uses a different system prompt (`build_system_prompt(output_format="markdown")` in `routers/estimations.py`) that asks the model to respond directly in readable Markdown. This means the raw tokens streamed from Claude can be displayed to the user immediately, with no buffering or reformatting — true token-by-token real-time output, not a replay after the fact.
+If the API rejects the input, the UI shows a friendly message per guardrail reason (`moderation`, `prompt_injection`, `pii`); any other failure shows a generic message and the raw server text is never displayed.
 
-### Features
-
-- **Real chat bubbles** — user messages on the right (sky blue), assistant replies on the left (light gray), like WhatsApp/iMessage
-- **True real-time streaming** — placeholder + delta pattern re-renders the bubble on every token as it's generated
-- **"Thinking" indicator** — animated dots shown the instant you hit send, replaced the moment the first token streams in
-- **Auto-clearing input** — `st.chat_input()` clears itself after every message, so you can keep chatting
-- **Sidebar dashboard** (in this order): New Chat button → Conversation Stats → Session Metrics (calls, tokens, cost, last call info) → How to Use → CAG reference examples used as context
-- **XSS-safe rendering** — all message content is HTML-escaped before being converted from the small Markdown subset we use (bold, bullets, line breaks) into HTML, since bubbles are rendered with `unsafe_allow_html=True`
+Why Markdown for streaming? Streaming raw JSON cannot be displayed or validated until it is complete, so the stream endpoint asks the model for readable Markdown (`output_format="markdown"` in the prompt templates). The structured endpoint is the one with schema validation, guardrails on the output and caching.
 
 ### Running it
 
@@ -295,6 +337,17 @@ docker-compose up
 ```
 
 Open **http://localhost:8501** in your browser.
+
+## Web UI (Rails)
+
+A Rails 8 web UI lives in [`../estimator-web/`](../estimator-web/README.md). It calls the structured `POST /api/v1/estimate` endpoint (not the streaming one), shows the estimate (summary, task table, totals) and keeps a history of successful estimates in Postgres. The Streamlit chat above, with its streaming markdown mode, is still available.
+
+```bash
+# from this directory
+docker compose up -d --build estimator-web postgres api redis
+```
+
+Open **http://localhost:3000**. See the [estimator-web README](../estimator-web/README.md) for the architecture, tests and known notes, and [DOCKER.md](./DOCKER.md) for the compose services.
 
 ## Getting Started
 
@@ -372,7 +425,7 @@ curl -X POST http://127.0.0.1:8001/api/v1/estimate \
 
 ```json
 {
-  "estimation": {
+  "result": {
     "project_name": "string",
     "meeting_summary": "string",
     "tasks": [
@@ -382,7 +435,7 @@ curl -X POST http://127.0.0.1:8001/api/v1/estimate \
         "description": "string",
         "estimated_hours": 24,
         "estimated_cost_usd": 960,
-        "complexity": "High",
+        "complexity": "Medium",
         "includes": ["deliverable1", "deliverable2"]
       }
     ],
@@ -395,24 +448,16 @@ curl -X POST http://127.0.0.1:8001/api/v1/estimate \
       "assumptions": ["assumption1", "assumption2"]
     }
   },
-  "model": "claude-haiku-4-5-20251001",
-  "provider": "anthropic",
-  "tokens_used": {
-    "input_tokens": 3577,
-    "output_tokens": 2295,
-    "total_tokens": 5872
-  },
-  "cost_breakdown": {
-    "input_cost_usd": 0.000011,
-    "output_cost_usd": 0.000034,
-    "total_cost_usd": 0.000045
-  }
+  "prompt_version": "v1",
+  "cached": false
 }
 ```
 
+Token usage and cost metrics are no longer part of the structured response; they are reported by the stream endpoint in its final `done` event. Errors: `400 {"reason", "message"}` for rejected input, `422` for an invalid body, generic `502` otherwise.
+
 ## Verification Pipeline
 
-To ensure project estimates are accurate and reliable, implement this verification pipeline:
+The checks below are now enforced in the code: the schema validators (`schemas/estimation.py`) and the output guardrail run on every structured request. `tests/test_verification.py` and `tests/verify_api.py` are the older stand-alone scripts and still describe the previous response shape. For an end-to-end check of the current API see [VERIFICATION.md](VERIFICATION.md). The ranges listed here are the original guidance; the enforced values are in [Structured output and validators](#structured-output-and-validators).
 
 ### 1. Schema Validation ✓
 - Verify response matches expected JSON structure
@@ -444,84 +489,31 @@ To ensure project estimates are accurate and reliable, implement this verificati
 - Team size should match estimated hours and duration
 - All assumptions should be relevant to the project
 
-### Running Verification Tests
-
-```bash
-# Run all verification tests
-pytest tests/ -v
-
-# Run specific verification test
-pytest tests/test_verification.py::test_estimation_schema -v
-
-# Run with coverage
-pytest tests/ --cov=cag_estimate
-```
-
-### Example Test
-
-```python
-def test_estimation_response_validation():
-    """Verify estimation response structure and calculations."""
-    response = estimate_project(
-        transcription="your meeting transcription...",
-        hourly_rate=40
-    )
-    
-    # Schema validation
-    assert "estimation" in response
-    assert "model" in response
-    assert "tokens_used" in response
-    
-    # Business logic validation
-    estimation = response["estimation"]
-    total_hours = sum(task["estimated_hours"] for task in estimation["tasks"])
-    assert total_hours == estimation["summary"]["total_hours"]
-    
-    # Reasonableness check
-    assert 8 <= estimation["summary"]["total_hours"] <= 500
-    assert 30 <= estimation["summary"]["hourly_rate"] <= 150
-    
-    print("✓ All validations passed")
-```
-
-## Project Structure
-
-```
-cag-estimate/
-├── src/
-│   ├── cag_estimate/
-│   │   ├── __init__.py
-│   │   ├── main.py                # FastAPI app setup
-│   │   ├── config.py              # Configuration (Pydantic BaseSettings)
-│   │   ├── routers/
-│   │   │   └── estimations.py    # Estimation endpoints (JSON + SSE stream)
-│   │   ├── services/
-│   │   │   └── llm_service.py    # LLM integration
-│   │   └── context/
-│   │       └── examples.py        # Reference estimation examples
-│   └── ui/
-│       └── streamlit_app.py       # Streamlit chat UI (real-time streaming)
-├── tests/
-│   ├── test_verification.py       # Verification pipeline tests
-│   └── test_endpoints.py          # API endpoint tests
-├── run_streamlit.sh                # Launches the chat UI
-├── .env                           # Environment variables (local)
-├── .env.example                   # Environment template
-├── pyproject.toml                 # Project configuration
-└── README.md                      # This file
-```
-
 ## Configuration
 
 ### Environment Variables
 
-| Variable | Description | Default | Example |
-|----------|-------------|---------|---------|
-| `ANTHROPIC_API_KEY` | Anthropic API key (required) | - | `sk-ant-...` |
-| `LLM_PROVIDER` | LLM provider to use | `anthropic` | `anthropic` |
-| `LLM_MODEL` | Claude model to use | `claude-haiku-4-5-20251001` | `claude-opus-4-1-20250805` |
-| `APP_ENV` | Application environment | `development` | `production` |
-| `LOG_LEVEL` | Logging level | `DEBUG` | `INFO`, `WARNING` |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ANTHROPIC_API_KEY` | Anthropic API key (required) | - |
+| `OPENAI_API_KEY` | Fallback model, moderation and semantic-cache embeddings | unset |
+| `LLM_PROVIDER` | LLM provider | `anthropic` |
+| `LLM_MODEL` | Primary model | `claude-haiku-4-5-20251001` |
+| `FALLBACK_MODEL` | Fallback model | `gpt-4o-mini` |
+| `LLM_TIMEOUT_SECONDS` | LLM call timeout | `60` |
+| `LLM_NUM_RETRIES` | Router retries | `2` |
+| `REDIS_URL` | Redis (Stack) URL | `redis://localhost:6379/0` |
+| `CACHE_TTL_SECONDS` | Exact-cache TTL | `86400` |
+| `EMBEDDING_MODEL` | Embedding model for the semantic cache | `text-embedding-3-small` |
+| `SEMANTIC_CACHE_ENABLED` | Enable the semantic cache | `true` |
+| `SEMANTIC_CACHE_THRESHOLD` | Minimum cosine similarity for a hit | `0.90` |
+| `SEMANTIC_CACHE_TTL` | Semantic entry TTL in seconds | `86400` |
+| `SEMANTIC_CACHE_LOG_ONLY` | Log would-be hits without serving them | `false` |
+| `APP_ENV` | Application environment | `development` |
+| `LOG_LEVEL` | structlog level (unknown names fall back to `INFO`) | `DEBUG` |
+| `API_BASE_URL` | Used by the Streamlit UI only | `http://localhost:8000` |
+
+`.env.example` does not list the `EMBEDDING_MODEL` and `SEMANTIC_CACHE_*` variables; add them to your `.env` if you want to change the defaults.
 
 ## Token Pricing (Claude Haiku 4.5)
 
@@ -546,27 +538,17 @@ cag-estimate/
 ### Running Tests
 
 ```bash
-# Install dev dependencies
-pip install pytest pytest-cov
-
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=cag_estimate
+uv run pytest          # whole suite, offline (no network, no Redis, no API keys)
+uv run pytest -k pipeline_order -v
+uv run ruff check .    # lint
 ```
+
+The suite fakes the LLM, Redis (fakeredis) and the RediSearch index, so it does not prove the real Redis Stack behaviour; use [VERIFICATION.md](VERIFICATION.md) for that.
 
 ### Code Quality
 
 ```bash
-# Format code
-black src/ tests/
-
-# Lint
-flake8 src/ tests/
-
-# Type checking
-mypy src/
+uv run ruff check .
 ```
 
 ## Troubleshooting
