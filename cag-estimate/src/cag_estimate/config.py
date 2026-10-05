@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     session_max_turns: int = DEFAULT_SESSION_MAX_TURNS
     # Safety cap for the in-memory session store (LRU eviction beyond it).
     session_max_sessions: int = DEFAULT_SESSION_MAX_SESSIONS
+    # Attachment limits: file count, bytes per file, chars of transcript + attachments.
+    attachment_max_files: int = 5
+    attachment_max_bytes: int = 5_000_000
+    attachment_max_chars_total: int = 80_000
     app_env: str = "development"
     log_level: str = "DEBUG"
 

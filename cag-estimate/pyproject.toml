@@ -20,6 +20,7 @@ dependencies = [
     "redisvl>=0.3",
     "numpy",
     "openai>=1.0",
+    "pypdf>=6.19.0",
 ]
 
 [project.scripts]
