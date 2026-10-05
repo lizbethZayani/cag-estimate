@@ -312,12 +312,12 @@ Error bodies never echo the offending text or the exception message. On the stre
 
 ## 💬 Streamlit Chat Interface
 
-A conversational frontend, located at [`src/ui/streamlit_app.py`](src/ui/streamlit_app.py), that talks to the FastAPI backend. A **Response mode** radio in the sidebar picks one of two modes:
+A conversational frontend, located at [`src/ui/streamlit_app.py`](src/ui/streamlit_app.py), that talks to the FastAPI backend. A **Response mode** radio in the sidebar picks the mode. The default, **Conversation (memory)**, is documented in [Conversation memory (sessions)](#conversation-memory-sessions); the two single-shot modes are:
 
 - **Streaming (markdown)**: calls `POST /api/v1/estimate/stream` and shows the answer token by token (SSE). Token and cost metrics are shown after each answer.
 - **Structured (JSON)**: calls `POST /api/v1/estimate` and renders a summary, a task table (task, complexity, hours, cost) and the totals. A badge shows whether the answer was served from cache or freshly generated. No token or cost metrics are shown in this mode.
 
-Both modes use an hourly rate of 40. Messages are kept in `st.session_state` (**New Chat** clears them); the backend is single-shot and does not receive the history as context. The API URL comes from the `API_BASE_URL` environment variable (default `http://localhost:8000`).
+Both modes use an hourly rate of 40. Messages are kept in `st.session_state` (**New Chat** clears them); in these two modes the backend is single-shot and does not receive the history as context. The API URL comes from the `API_BASE_URL` environment variable (default `http://localhost:8000`).
 
 If the API rejects the input, the UI shows a friendly message per guardrail reason (`moderation`, `prompt_injection`, `pii`); any other failure shows a generic message and the raw server text is never displayed.
 
@@ -337,6 +337,112 @@ docker-compose up
 ```
 
 Open **http://localhost:8501** in your browser.
+
+## Conversation memory (sessions)
+
+Sessions let several estimates in one conversation share context: the model remembers the project across turns, and PDF or text attachments become part of the input.
+
+### Start the project and run the tests
+
+```bash
+# API on port 8000
+docker-compose up                      # or, locally from this directory:
+PYTHONPATH=src uv run uvicorn cag_estimate.main:app --host 0.0.0.0 --port 8000
+
+# Streamlit UI on http://localhost:8501 (from this directory)
+API_BASE_URL=http://localhost:8000 PYTHONPATH=src uv run streamlit run src/ui/streamlit_app.py
+
+# Tests (offline: LLM, Redis and moderation are faked)
+PYTHONPATH=src uv run pytest -q
+```
+
+`PYTHONPATH=src` is needed on macOS: `uv run` re-syncs the editable install and the generated `.pth` file gets the hidden flag, so Python skips it and `cag_estimate` is not importable without it.
+
+The Streamlit default mode, **Conversation (memory)**, creates a session lazily, offers a transcript box plus a multi-file uploader (`pdf`, `txt`, `md`, `csv`, `json`), shows the accumulated `project_metadata` in a sidebar expander, and has a **New conversation** button that opens a fresh session.
+
+### Endpoints
+
+| Method and path | Purpose |
+|-----------------|---------|
+| `POST /api/v1/sessions` | Create a session. `201` with `{"session_id": "<uuid4>"}` |
+| `GET /api/v1/sessions/{id}` | Snapshot: `session_id`, `project_metadata`, `turns` (`404` if unknown) |
+| `POST /api/v1/sessions/{id}/estimate` | Estimate within the session (`multipart/form-data`) |
+
+Fields of `POST /api/v1/sessions/{id}/estimate`:
+
+- `transcript` (required): up to 80,000 characters, not blank.
+- `hourly_rate` (optional, default `40`): between the same bounds as `/estimate`.
+- `attachments` (optional, repeatable): PDF, `.txt`, `.md`, `.csv` or `.json`. Defaults: at most 5 files, 5,000,000 bytes per file, 80,000 characters for transcript plus attachment text combined.
+
+The response is the regular estimation (`result`, `prompt_version`, `cached`, which is always `false` here) plus `session_id`, `project_metadata`, `turns` and `attachments` (the file names used).
+
+| Status | When |
+|--------|------|
+| 400 | Input guardrail rejection: `{"reason", "message"}` (moderation, prompt injection, PII), applied to the transcript and the attachment text together |
+| 404 | Unknown session |
+| 413 | Too many files, a file or the combined text over the limits |
+| 415 | Unsupported attachment type |
+| 422 | Blank transcript, hourly rate out of bounds, or an unreadable attachment (corrupt PDF, or a PDF with no extractable text) |
+| 502 | Any other failure; the message is generic and never carries upstream detail |
+
+```bash
+SID=$(curl -s -X POST http://localhost:8000/api/v1/sessions | python3 -c 'import sys, json; print(json.load(sys.stdin)["session_id"])')
+
+curl -s -X POST "http://localhost:8000/api/v1/sessions/$SID/estimate" \
+  -F 'transcript=Project Falcon: a bookstore web shop in Django with Stripe payments.' \
+  -F 'hourly_rate=40' \
+  -F 'attachments=@requirements.pdf'
+
+# Second turn: the project name is not repeated, the session remembers it
+curl -s -X POST "http://localhost:8000/api/v1/sessions/$SID/estimate" \
+  -F 'transcript=Now add an admin dashboard.'
+
+curl -s "http://localhost:8000/api/v1/sessions/$SID"
+```
+
+### Attachment path: B (extract the text in the service)
+
+The practice brief offers two paths: A, upload files to a provider Files API and reference them in the message, or B, extract the text in our service and append it to the transcript. This project uses **Path B** ([`services/attachments.py`](src/cag_estimate/services/attachments.py)), because:
+
+- **Provider-agnostic.** The LLM layer is LiteLLM with an Anthropic to OpenAI fallback. A Files API is provider-specific, so a fallback call would not see the files.
+- **Offline-testable.** Text extraction (`pypdf` for PDFs, UTF-8 decoding for the text formats) runs without network, so the whole flow is covered by tests with a fake LLM.
+- **Guardrails see the document.** Moderation, prompt-injection and PII checks run on the transcript plus the attachment text combined, so an attachment cannot smuggle in what the transcript could not.
+
+Each attachment is appended after the transcript as `--- attachment: <filename> ---` followed by its text. File names are sanitized (path components and control characters removed, runs of three or more dashes collapsed) so a name cannot fake a separator. Limits are enforced while reading (a file is never fully buffered past its limit) and again on the combined text. Scanned PDFs have no text layer and are rejected with `422`; there is no OCR.
+
+### How `project_metadata` is extracted
+
+`project_metadata` has `project_name`, `assumed_team_size`, `mentioned_technologies` and `agreed_scope`. After each successful turn it is updated by a **deterministic heuristic** ([`services/metadata_extractor.py`](src/cag_estimate/services/metadata_extractor.py)) over the structured estimate the model already returned:
+
+- `project_name` and `assumed_team_size` (first number in the team-size text) come from the estimate's fields.
+- `agreed_scope` is the estimate's meeting summary, whitespace-collapsed and truncated to 300 characters.
+- `mentioned_technologies` come from scanning the transcript (attachments included) and the task names, descriptions and includes against a curated vocabulary of about 35 technologies.
+
+Merging keeps non-empty new values (the latest name, team size and scope win) and takes the union of technologies, case-insensitively.
+
+Why not a second LLM call as extractor: it adds a call, cost, latency and a new failure mode to every turn, and it would make the memory tests depend on a live model. The heuristic is free, deterministic and testable offline. Its limits: only technologies in the vocabulary are detected (ambiguous names such as `Go` and `R` are excluded on purpose), and the scope is a truncated summary rather than a curated statement of what was agreed.
+
+### Memory versus history
+
+- **Memory (`project_metadata`)** holds long-term facts. It is injected into the system prompt as a `<project_metadata>` block (prompt version `v1`); with empty metadata, the first call of a session, no block is rendered and the prompt is identical to a non-session one.
+- **History** is a sliding window of the last `SESSION_MAX_TURNS` user/assistant pairs (default 6). When it overflows, the oldest pairs are dropped, always as whole pairs, so there is never an orphan assistant message.
+- **The system prompt is not part of the window.** It is regenerated from the current metadata on every call, so it is always present and never trimmed.
+- **Compact user turn.** The full text of a turn (transcript plus attachments) is sent to the model once, in the current message. What is stored in history is the transcript truncated to 4,000 characters plus the names of the attachments, so a large document does not repeat in every later turn. The assistant side stores the estimate as JSON.
+- **A failed turn changes nothing.** History and metadata are updated only after the estimate succeeds and passes the output guardrail.
+
+### Caching and volatility
+
+- **Session estimates bypass the exact and semantic caches.** The answer depends on the history and the accumulated metadata, not only on the submitted text, so a cache keyed on the text could serve an answer from another context.
+- **Sessions live in process memory.** They are lost on restart, are not shared between workers or processes, and are never persisted. `SESSION_MAX_SESSIONS` (default 1000) caps the store; beyond it the least recently used session is evicted and its id then answers `404`. A later stage would move sessions to Redis or a database, with a TTL and a shared store so any worker can serve any session.
+- Requests on the same session are serialized with a lock, so concurrent turns cannot interleave.
+
+### Configuration
+
+`SESSION_MAX_TURNS`, `SESSION_MAX_SESSIONS`, `ATTACHMENT_MAX_FILES`, `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_MAX_CHARS_TOTAL` and `LLM_STRUCTURED_MAX_TOKENS` are listed in [Environment Variables](#environment-variables). `docker-compose.yml` passes them to the `api` service with the defaults shown there. The structured token limit matters in conversations: later turns can produce larger estimates, and a limit that is too low truncates the JSON and fails the request.
+
+### Tests
+
+The Step 7 integration tests are in [`tests/test_session_integration.py`](tests/test_session_integration.py) and use `httpx.AsyncClient` against the real app with a recording fake LLM: chained requests update the metadata, an attached PDF changes the estimate (a qualitative test of the plumbing: the fake LLM reacts to the text it receives), and eight turns never put more than `SESSION_MAX_TURNS` pairs in the history sent to the LLM. Endpoint tests are in `tests/test_sessions_endpoints.py`.
 
 ## Web UI (Rails)
 
@@ -503,6 +609,11 @@ The checks below are now enforced in the code: the schema validators (`schemas/e
 | `LLM_TIMEOUT_SECONDS` | LLM call timeout | `60` |
 | `LLM_NUM_RETRIES` | Router retries | `2` |
 | `LLM_STRUCTURED_MAX_TOKENS` | Output token limit for structured (estimate) calls | `8192` |
+| `SESSION_MAX_TURNS` | User/assistant pairs kept in a session's history window | `6` |
+| `SESSION_MAX_SESSIONS` | Cap on in-memory sessions (oldest-used evicted first) | `1000` |
+| `ATTACHMENT_MAX_FILES` | Attachments per session estimate | `5` |
+| `ATTACHMENT_MAX_BYTES` | Bytes per attachment | `5000000` |
+| `ATTACHMENT_MAX_CHARS_TOTAL` | Characters of transcript plus attachment text | `80000` |
 | `REDIS_URL` | Redis (Stack) URL | `redis://localhost:6379/0` |
 | `CACHE_TTL_SECONDS` | Exact-cache TTL | `86400` |
 | `EMBEDDING_MODEL` | Embedding model for the semantic cache | `text-embedding-3-small` |
