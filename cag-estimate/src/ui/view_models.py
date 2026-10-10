@@ -3,6 +3,10 @@
 import json
 from typing import Any
 
+# The UI is a separate process and must not import the backend, so the hourly-rate
+# bounds are mirrored here; tests assert they match cag_estimate.schemas.estimation.
+MIN_HOURLY_RATE, MAX_HOURLY_RATE = 30, 150
+
 GENERIC_ERROR = "The estimation service is temporarily unavailable. Please try again."
 
 GUARDRAIL_MESSAGES = {

@@ -240,6 +240,17 @@ async def test_transcript_over_limit_is_422(client: httpx.AsyncClient) -> None:
     assert response.status_code == 422
 
 
+async def test_transcript_limit_comes_from_settings(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_limits(monkeypatch, transcript_max_chars=50)
+    session_id = await _new_session(client)
+    too_long = await client.post(_estimate_url(session_id), data={"transcript": "x" * 51})
+    at_limit = await client.post(_estimate_url(session_id), data={"transcript": "x" * 50})
+    assert too_long.status_code == 422
+    assert at_limit.status_code == 200
+
+
 @pytest.mark.parametrize("rate", ["29", "151"])
 async def test_hourly_rate_out_of_bounds_is_422(client: httpx.AsyncClient, rate: str) -> None:
     session_id = await _new_session(client)

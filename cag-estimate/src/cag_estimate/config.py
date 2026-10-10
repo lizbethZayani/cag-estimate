@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     attachment_max_files: int = 5
     attachment_max_bytes: int = 5_000_000
     attachment_max_chars_total: int = 80_000
+    # Longest transcript accepted by the session estimate endpoint, in characters.
+    transcript_max_chars: int = 80_000
     app_env: str = "development"
     log_level: str = "DEBUG"
 

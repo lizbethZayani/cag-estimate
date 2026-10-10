@@ -438,7 +438,7 @@ Why not a second LLM call as extractor: it adds a call, cost, latency and a new 
 
 ### Configuration
 
-`SESSION_MAX_TURNS`, `SESSION_MAX_SESSIONS`, `ATTACHMENT_MAX_FILES`, `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_MAX_CHARS_TOTAL` and `LLM_STRUCTURED_MAX_TOKENS` are listed in [Environment Variables](#environment-variables). `docker-compose.yml` passes them to the `api` service with the defaults shown there. The structured token limit matters in conversations: later turns can produce larger estimates, and a limit that is too low truncates the JSON and fails the request.
+`SESSION_MAX_TURNS`, `SESSION_MAX_SESSIONS`, `ATTACHMENT_MAX_FILES`, `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_MAX_CHARS_TOTAL`, `TRANSCRIPT_MAX_CHARS` and `LLM_STRUCTURED_MAX_TOKENS` are listed in [Environment Variables](#environment-variables). `docker-compose.yml` passes them to the `api` service with the defaults shown there. The structured token limit matters in conversations: later turns can produce larger estimates, and a limit that is too low truncates the JSON and fails the request.
 
 ### Tests
 
@@ -614,6 +614,7 @@ The checks below are now enforced in the code: the schema validators (`schemas/e
 | `ATTACHMENT_MAX_FILES` | Attachments per session estimate | `5` |
 | `ATTACHMENT_MAX_BYTES` | Bytes per attachment | `5000000` |
 | `ATTACHMENT_MAX_CHARS_TOTAL` | Characters of transcript plus attachment text | `80000` |
+| `TRANSCRIPT_MAX_CHARS` | Longest transcript accepted by the session estimate endpoint | `80000` |
 | `REDIS_URL` | Redis (Stack) URL | `redis://localhost:6379/0` |
 | `CACHE_TTL_SECONDS` | Exact-cache TTL | `86400` |
 | `EMBEDDING_MODEL` | Embedding model for the semantic cache | `text-embedding-3-small` |

@@ -24,7 +24,6 @@ MODE_CONVERSATION = "Conversation (memory)"
 MODE_STREAMING = "Streaming (markdown)"
 MODE_STRUCTURED = "Structured (JSON)"
 DEFAULT_HOURLY_RATE = 40
-MIN_HOURLY_RATE, MAX_HOURLY_RATE = 30, 150
 CONVERSATION_KEY = "conversation_messages"
 ATTACHMENT_TYPES = ["pdf", "txt", "md", "csv", "json"]
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
@@ -399,7 +398,10 @@ def render_conversation_inputs() -> None:
         key=f"uploads_{nonce}",
     )
     rate = st.number_input(
-        "Hourly rate (USD)", MIN_HOURLY_RATE, MAX_HOURLY_RATE, DEFAULT_HOURLY_RATE
+        "Hourly rate (USD)",
+        view_models.MIN_HOURLY_RATE,
+        view_models.MAX_HOURLY_RATE,
+        DEFAULT_HOURLY_RATE,
     )
     if not st.button("Send", type="primary"):
         return

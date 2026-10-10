@@ -8,8 +8,10 @@ exception text.
 
 import io
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath, PureWindowsPath
+from typing import BinaryIO, Protocol
 
 import structlog
 from pypdf import PdfReader
@@ -26,6 +28,7 @@ _PDF_CONTENT_TYPE = "application/pdf"
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 _DASH_RUNS = re.compile(r"-{3,}")
 _FALLBACK_FILENAME = "attachment"
+_READ_CHUNK_BYTES = 64 * 1024
 
 
 class AttachmentError(Exception):
@@ -46,6 +49,35 @@ class ExtractedAttachment:
     text: str
 
 
+class Upload(Protocol):
+    """The part of an uploaded file (e.g. a FastAPI ``UploadFile``) this service needs."""
+
+    @property
+    def filename(self) -> str | None: ...
+
+    @property
+    def content_type(self) -> str | None: ...
+
+    @property
+    def file(self) -> BinaryIO: ...
+
+
+def extract_uploads(uploads: Sequence[Upload]) -> list[ExtractedAttachment]:
+    """Enforce the file-count limit, then read and extract each upload in turn."""
+    settings = get_settings()
+    if len(uploads) > settings.attachment_max_files:
+        raise AttachmentTooLargeError(
+            f"Too many attachments; the maximum is {settings.attachment_max_files}."
+        )
+    extracted: list[ExtractedAttachment] = []
+    for upload in uploads:
+        filename = upload.filename or ""
+        data = _read_limited(upload.file, settings.attachment_max_bytes)
+        text = extract_attachment_text(filename, upload.content_type, data)
+        extracted.append(ExtractedAttachment(filename=filename, text=text))
+    return extracted
+
+
 def extract_attachment_text(filename: str, content_type: str | None, data: bytes) -> str:
     """Return the text of one attachment, deciding the type by extension first."""
     if len(data) > get_settings().attachment_max_bytes:
@@ -60,10 +92,6 @@ def extract_attachment_text(filename: str, content_type: str | None, data: bytes
 def build_combined_transcript(transcript: str, attachments: list[ExtractedAttachment]) -> str:
     """Append each attachment after the transcript under a sanitized separator."""
     settings = get_settings()
-    if len(attachments) > settings.attachment_max_files:
-        raise AttachmentTooLargeError(
-            f"Too many attachments; the maximum is {settings.attachment_max_files}."
-        )
     parts = [transcript]
     for attachment in attachments:
         parts.append(
@@ -75,6 +103,18 @@ def build_combined_transcript(transcript: str, attachments: list[ExtractedAttach
             f"Transcript and attachments exceed {settings.attachment_max_chars_total} characters."
         )
     return combined
+
+
+def _read_limited(file: BinaryIO, limit: int) -> bytes:
+    """Read at most ``limit`` + 1 bytes so an oversized file is never fully buffered."""
+    chunks: list[bytes] = []
+    size = 0
+    while chunk := file.read(_READ_CHUNK_BYTES):
+        chunks.append(chunk)
+        size += len(chunk)
+        if size > limit:
+            break
+    return b"".join(chunks)
 
 
 def _extension(filename: str) -> str:

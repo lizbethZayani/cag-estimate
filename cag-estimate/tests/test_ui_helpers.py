@@ -115,6 +115,15 @@ def test_status_error_message_maps_400_reason_and_502():
 
 # ---------- view_models: sessions ----------
 
+def test_ui_rate_bounds_match_the_backend_schema():
+    from cag_estimate.schemas import estimation
+
+    assert (view_models.MIN_HOURLY_RATE, view_models.MAX_HOURLY_RATE) == (
+        estimation.MIN_HOURLY_RATE,
+        estimation.MAX_HOURLY_RATE,
+    )
+
+
 def test_session_status_messages_are_distinct_and_never_raw():
     codes = [404, 413, 415, 422, 502]
     messages = {code: view_models.session_status_error_message(code, {"detail": "secret"})

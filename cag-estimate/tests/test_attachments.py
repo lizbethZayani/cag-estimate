@@ -1,5 +1,9 @@
 """Offline tests for attachment text extraction and transcript building."""
 
+import io
+from dataclasses import dataclass, field
+from typing import BinaryIO
+
 import pytest
 
 from cag_estimate.config import Settings
@@ -11,6 +15,7 @@ from cag_estimate.services.attachments import (
     UnsupportedAttachmentError,
     build_combined_transcript,
     extract_attachment_text,
+    extract_uploads,
 )
 from tests.pdf_helpers import build_pdf
 
@@ -94,10 +99,47 @@ def test_filename_cannot_inject_prompt_text():
     assert combined.count("--- attachment:") == 1
 
 
-def test_too_many_attachments_is_too_large():
-    files = [ExtractedAttachment(f"{i}.txt", "x") for i in range(3)]
+@dataclass
+class FakeUpload:
+    filename: str | None
+    content_type: str | None
+    file: BinaryIO = field(default_factory=lambda: io.BytesIO(b""))
+
+
+class CountingFile(io.BytesIO):
+    """Records how many bytes were actually read."""
+
+    bytes_read = 0
+
+    def read(self, size: int | None = -1) -> bytes:
+        chunk = super().read(size)
+        self.bytes_read += len(chunk)
+        return chunk
+
+
+def test_extract_uploads_returns_filename_and_text():
+    uploads = [FakeUpload("a.txt", "text/plain", io.BytesIO(b"alpha"))]
+    assert extract_uploads(uploads) == [ExtractedAttachment("a.txt", "alpha")]
+
+
+def test_extract_uploads_treats_missing_filename_as_empty():
+    uploads = [FakeUpload(None, "text/plain", io.BytesIO(b"alpha"))]
+    assert extract_uploads(uploads) == [ExtractedAttachment("", "alpha")]
+
+
+def test_too_many_uploads_is_too_large_before_reading_any():
+    source = CountingFile(b"x")
+    uploads = [FakeUpload(f"{i}.txt", "text/plain", source) for i in range(3)]
     with pytest.raises(AttachmentTooLargeError):
-        build_combined_transcript("t", files)
+        extract_uploads(uploads)
+    assert source.bytes_read == 0
+
+
+def test_oversized_upload_is_rejected_without_reading_it_all():
+    huge = CountingFile(b"x" * 1_000_000)
+    with pytest.raises(AttachmentTooLargeError):
+        extract_uploads([FakeUpload("big.txt", "text/plain", huge)])
+    assert huge.bytes_read < 1_000_000
 
 
 def test_combined_text_over_char_limit_is_too_large():

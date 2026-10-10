@@ -20,9 +20,8 @@ from cag_estimate.schemas.session import ProjectMetadata, SessionCreated, Sessio
 from cag_estimate.services.attachments import (
     AttachmentError,
     AttachmentTooLargeError,
-    ExtractedAttachment,
     UnsupportedAttachmentError,
-    extract_attachment_text,
+    extract_uploads,
 )
 from cag_estimate.services.session_estimation import SessionEstimationService
 from cag_estimate.services.sessions import Session, SessionNotFoundError, SessionStore
@@ -34,15 +33,14 @@ router = APIRouter(prefix="/api/v1", tags=["sessions"])
 Store = Annotated[SessionStore, Depends(get_session_store)]
 Service = Annotated[SessionEstimationService, Depends(get_session_estimation_service)]
 
-MAX_TRANSCRIPT_CHARS = 80_000
-READ_CHUNK_BYTES = 64 * 1024
 SESSION_NOT_FOUND = "Session not found."
 EMPTY_TRANSCRIPT = "The transcript must not be empty."
+TRANSCRIPT_TOO_LONG = "The transcript exceeds the allowed length."
 ATTACHMENT_TOO_LARGE = "An attachment or the combined text exceeds the allowed size."
 ATTACHMENT_UNSUPPORTED = "Unsupported attachment type."
 ATTACHMENT_INVALID = "An attachment could not be read."
 
-Transcript = Annotated[str, Form(max_length=MAX_TRANSCRIPT_CHARS)]
+Transcript = Annotated[str, Form()]
 HourlyRate = Annotated[int, Form(ge=MIN_HOURLY_RATE, le=MAX_HOURLY_RATE)]
 
 
@@ -60,31 +58,11 @@ def _get_session(store: SessionStore, session_id: str) -> Session:
         raise HTTPException(status_code=404, detail=SESSION_NOT_FOUND) from exc
 
 
-def _read_limited(upload: UploadFile, limit: int) -> bytes:
-    """Read at most ``limit`` + 1 bytes so an oversized file is never fully buffered."""
-    chunks: list[bytes] = []
-    size = 0
-    while chunk := upload.file.read(READ_CHUNK_BYTES):
-        chunks.append(chunk)
-        size += len(chunk)
-        if size > limit:
-            break
-    return b"".join(chunks)
-
-
-def _extract_all(uploads: list[UploadFile]) -> list[ExtractedAttachment]:
-    settings = get_settings()
-    if len(uploads) > settings.attachment_max_files:
-        raise AttachmentTooLargeError(
-            f"Too many attachments; the maximum is {settings.attachment_max_files}."
-        )
-    extracted: list[ExtractedAttachment] = []
-    for upload in uploads:
-        filename = upload.filename or ""
-        data = _read_limited(upload, settings.attachment_max_bytes)
-        text = extract_attachment_text(filename, upload.content_type, data)
-        extracted.append(ExtractedAttachment(filename=filename, text=text))
-    return extracted
+def _validate_transcript(transcript: str) -> None:
+    if not transcript.strip():
+        raise HTTPException(status_code=422, detail=EMPTY_TRANSCRIPT)
+    if len(transcript) > get_settings().transcript_max_chars:
+        raise HTTPException(status_code=422, detail=TRANSCRIPT_TOO_LONG)
 
 
 def _attachment_http_error(exc: AttachmentError) -> HTTPException:
@@ -131,10 +109,9 @@ def estimate_in_session(
     """
     uploads = attachments or []
     try:
-        if not transcript.strip():
-            raise HTTPException(status_code=422, detail=EMPTY_TRANSCRIPT)
+        _validate_transcript(transcript)
         session = _get_session(store, session_id)
-        extracted = _extract_all(uploads)
+        extracted = extract_uploads(uploads)
         return service.estimate(session, transcript, extracted, hourly_rate)
     except AttachmentError as exc:
         log.info("session_attachment_rejected", error_type=type(exc).__name__)
