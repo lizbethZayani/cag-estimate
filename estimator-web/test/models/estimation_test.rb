@@ -31,6 +31,13 @@ class EstimationTest < ActiveSupport::TestCase
     assert_equal 80, build(transcription: "x" * 100).transcription_preview.length
   end
 
+  test "chat_session is optional and can be assigned" do
+    assert build.valid?
+    session = ChatSession.create!(remote_session_id: "s-1")
+    estimation = build(chat_session: session).tap(&:save!)
+    assert_equal session, estimation.reload.chat_session
+  end
+
   test "persists the payload as jsonb" do
     estimation = build.tap(&:save!)
     assert_equal 298, Estimation.find(estimation.id).response_payload.dig("result", "summary", "total_hours")

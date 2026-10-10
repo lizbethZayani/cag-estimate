@@ -1,10 +1,12 @@
 require "faraday"
+require "faraday/multipart"
 
 module EstimatorAi
   class Client
     Error          = Class.new(StandardError)
     InvalidRequest = Class.new(Error)
     ServerError    = Class.new(Error)
+    SessionNotFound = Class.new(Error)
 
     # Input rejected by the API guardrails. `message` is the API's safe,
     # user-facing text; `reason` is one of GUARDRAIL_REASONS.
@@ -23,6 +25,13 @@ module EstimatorAi
                    timeout:  Rails.application.config.estimator_ai.timeout)
       @conn = Faraday.new(url: base_url) do |f|
         f.request  :json
+        f.response :json
+        f.options.timeout = timeout
+        f.adapter Faraday.default_adapter
+      end
+      @multipart_conn = Faraday.new(url: base_url) do |f|
+        f.request  :multipart, flat_encode: true # repeated `attachments` fields, no `[]`
+        f.request  :url_encoded
         f.response :json
         f.options.timeout = timeout
         f.adapter Faraday.default_adapter
@@ -49,7 +58,71 @@ module EstimatorAi
       end
     end
 
+    # --- chat sessions ---------------------------------------------------
+
+    def create_session
+      response = @conn.post(SESSIONS_PATH)
+      raise ServerError, "unexpected status #{response.status}" unless response.status == 201
+
+      response.body.fetch("session_id")
+    end
+
+    def get_session(session_id)
+      response = @conn.get("#{SESSIONS_PATH}/#{session_id}")
+
+      case response.status
+      when 200 then response.body
+      when 404 then raise SessionNotFound, "Conversation not found or expired"
+      else raise ServerError, "unexpected status #{response.status}"
+      end
+    end
+
+    # A missing remote session is fine: the goal (it is gone) is already met.
+    def delete_session(session_id)
+      response = @conn.delete("#{SESSIONS_PATH}/#{session_id}")
+      return true if [ 204, 404 ].include?(response.status)
+
+      raise ServerError, "unexpected status #{response.status}"
+    end
+
+    # ``request`` is a SessionEstimationRequest; ``attachments`` are uploaded
+    # files (ActionDispatch::Http::UploadedFile, Rack::Test::UploadedFile or
+    # anything exposing path/tempfile, original_filename and content_type).
+    def estimate_in_session(session_id, request, attachments: [])
+      raise ArgumentError, "request must be valid" unless request.valid?
+
+      body = request.to_form_fields.transform_keys(&:to_s)
+      parts = Array(attachments).compact_blank.map { |file| file_part(file) }
+      body["attachments"] = parts if parts.any?
+
+      response = @multipart_conn.post("#{SESSIONS_PATH}/#{session_id}/estimate", body)
+      handle_session_estimate(response)
+    end
+
     private
+
+    SESSIONS_PATH = "/api/v1/sessions".freeze
+
+    def handle_session_estimate(response)
+      case response.status
+      when 200 then response.body
+      when 400 then raise_for_bad_request(response.body)
+      when 404 then raise SessionNotFound, "Conversation not found or expired"
+      when 413 then raise InvalidRequest, "Attachments are too large or too many"
+      when 415 then raise InvalidRequest, "Unsupported attachment type"
+      when 422 then raise InvalidRequest, "The API could not read the request or an attachment"
+      when 502 then raise ServerError, "Upstream LLM call failed"
+      else raise ServerError, "unexpected status #{response.status}"
+      end
+    end
+
+    def file_part(file)
+      io = file.respond_to?(:tempfile) ? file.tempfile : file
+      path = io.respond_to?(:path) ? io.path : file.path
+      Faraday::Multipart::FilePart.new(
+        path, file.content_type.presence || "application/octet-stream", file.original_filename
+      )
+    end
 
     def raise_for_bad_request(body)
       reason = body.is_a?(Hash) ? body["reason"] : nil
