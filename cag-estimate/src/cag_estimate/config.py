@@ -2,6 +2,10 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings
 
+DEFAULT_SESSION_MAX_TURNS = 6
+DEFAULT_SESSION_MAX_SESSIONS = 1000
+DEFAULT_STRUCTURED_MAX_TOKENS = 8192
+
 
 class Settings(BaseSettings):
     anthropic_api_key: str
@@ -11,6 +15,8 @@ class Settings(BaseSettings):
     fallback_model: str = "gpt-4o-mini"
     llm_timeout_seconds: int = 60
     llm_num_retries: int = 2
+    # Output budget for structured (Instructor) calls; too low truncates large estimates.
+    llm_structured_max_tokens: int = DEFAULT_STRUCTURED_MAX_TOKENS
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl_seconds: int = 86400
     embedding_model: str = "text-embedding-3-small"
@@ -22,6 +28,14 @@ class Settings(BaseSettings):
     # Log would-be hits without serving them (to calibrate the threshold).
     semantic_cache_log_only: bool = False
     semantic_cache_enabled: bool = True
+    # Sliding window: one turn = one user + one assistant message.
+    session_max_turns: int = DEFAULT_SESSION_MAX_TURNS
+    # Safety cap for the in-memory session store (LRU eviction beyond it).
+    session_max_sessions: int = DEFAULT_SESSION_MAX_SESSIONS
+    # Attachment limits: file count, bytes per file, chars of transcript + attachments.
+    attachment_max_files: int = 5
+    attachment_max_bytes: int = 5_000_000
+    attachment_max_chars_total: int = 80_000
     app_env: str = "development"
     log_level: str = "DEBUG"
 

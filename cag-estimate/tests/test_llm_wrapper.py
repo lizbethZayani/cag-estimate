@@ -13,6 +13,7 @@ import redis
 from instructor.core.exceptions import InstructorRetryException
 from pydantic import BaseModel, field_validator
 
+from cag_estimate.config import Settings
 from cag_estimate.services.cache import EstimationCache
 from cag_estimate.services.llm_wrapper import LLMWrapper
 
@@ -20,7 +21,7 @@ PRIMARY = "claude-haiku-4-5-20251001"
 FALLBACK = "gpt-4o-mini"
 
 
-def _wrapper(cache: EstimationCache) -> LLMWrapper:
+def _wrapper(cache: EstimationCache, **overrides: Any) -> LLMWrapper:
     return LLMWrapper(
         anthropic_api_key="a",
         openai_api_key="o",
@@ -29,6 +30,7 @@ def _wrapper(cache: EstimationCache) -> LLMWrapper:
         timeout=5,
         num_retries=0,
         cache=cache,
+        **overrides,
     )
 
 
@@ -323,3 +325,65 @@ def test_structured_provider_failure_propagates(cache: EstimationCache) -> None:
         wrapper.complete_structured(system_prompt="s", user_message="u", response_model=Out)
 
     assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+
+def test_structured_inserts_history_between_system_and_user(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache)
+    wrapper.router = FakeRouter([_tool_response({"n": 1})])
+    history = [
+        {"role": "user", "content": "first question"},
+        {"role": "assistant", "content": "first answer"},
+    ]
+
+    wrapper.complete_structured(
+        system_prompt="s", user_message="u", response_model=Out, history=history
+    )
+
+    messages = wrapper.router.calls[0]["messages"]
+    assert [m["role"] for m in messages[:4]] == ["system", "user", "assistant", "user"]
+    assert messages[1]["content"] == "first question"
+    assert messages[2]["content"] == "first answer"
+    assert messages[3]["content"] == "u"
+
+
+def test_structured_without_history_keeps_system_then_user(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache)
+    wrapper.router = FakeRouter([_tool_response({"n": 1})])
+
+    wrapper.complete_structured(system_prompt="s", user_message="u", response_model=Out)
+
+    messages = wrapper.router.calls[0]["messages"]
+    assert [m["role"] for m in messages] == ["system", "user"]
+
+
+def test_structured_uses_configured_max_tokens_by_default(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache, structured_max_tokens=1234)
+    wrapper.router = FakeRouter([_tool_response({"n": 1})])
+
+    wrapper.complete_structured(system_prompt="s", user_message="u", response_model=Out)
+
+    assert wrapper.router.calls[0]["max_tokens"] == 1234
+
+
+def test_structured_explicit_max_tokens_wins(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache, structured_max_tokens=1234)
+    wrapper.router = FakeRouter([_tool_response({"n": 1})])
+
+    wrapper.complete_structured(
+        system_prompt="s", user_message="u", response_model=Out, max_tokens=99
+    )
+
+    assert wrapper.router.calls[0]["max_tokens"] == 99
+
+
+def test_structured_max_tokens_default_is_8192(cache: EstimationCache) -> None:
+    wrapper = _wrapper(cache)
+    wrapper.router = FakeRouter([_tool_response({"n": 1})])
+
+    wrapper.complete_structured(system_prompt="s", user_message="u", response_model=Out)
+
+    assert wrapper.router.calls[0]["max_tokens"] == 8192
+
+
+def test_settings_structured_max_tokens_default_is_8192() -> None:
+    assert Settings(anthropic_api_key="k").llm_structured_max_tokens == 8192

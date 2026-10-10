@@ -2,11 +2,13 @@
 CAG Estimate Chat Interface
 
 - Chat with message history kept in ``st.session_state`` and re-rendered on every rerun.
-- Two modes: streaming markdown (token by token) and structured JSON (task table).
+- Three modes: conversation with session memory (default), streaming markdown
+  (token by token) and structured JSON (task table).
 - Friendly guardrail messages; raw server errors are never displayed.
 
-Note: the backend is single-shot per message. Every request is estimated on its
-own; the history is a UI convenience and is NOT sent back as conversation context.
+Note: the streaming and structured modes are single-shot per message: their history is
+a UI convenience and is NOT sent back as context. Conversation mode uses an API
+session (project memory + sliding window) that lives in the API process memory.
 """
 
 import html as html_lib
@@ -18,9 +20,13 @@ import estimate_client
 import streamlit as st
 import view_models
 
+MODE_CONVERSATION = "Conversation (memory)"
 MODE_STREAMING = "Streaming (markdown)"
 MODE_STRUCTURED = "Structured (JSON)"
 DEFAULT_HOURLY_RATE = 40
+MIN_HOURLY_RATE, MAX_HOURLY_RATE = 30, 150
+CONVERSATION_KEY = "conversation_messages"
+ATTACHMENT_TYPES = ["pdf", "txt", "md", "csv", "json"]
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 st.set_page_config(
@@ -41,10 +47,18 @@ def session_defaults() -> dict[str, Any]:
     }
 
 
+def apply_state(defaults: dict[str, Any], overwrite: bool = False) -> None:
+    """Set state defaults; with ``overwrite`` reset the keys to their defaults."""
+    for key, value in defaults.items():
+        if overwrite:
+            st.session_state[key] = value
+        else:
+            st.session_state.setdefault(key, value)
+
+
 def init_session_state() -> None:
     """Initialize session state variables."""
-    for key, value in session_defaults().items():
-        st.session_state.setdefault(key, value)
+    apply_state(session_defaults())
 
 
 def now() -> str:
@@ -128,7 +142,7 @@ THINKING_BUBBLE_HTML = """
 """
 
 
-def render_structured(result: dict[str, Any], cached: bool) -> None:
+def render_structured(result: dict[str, Any], cached: bool, caption: str | None = None) -> None:
     """Render a ProjectEstimation dict: cache badge, summary, task table and totals."""
     with st.chat_message("assistant"):
         if cached:
@@ -145,13 +159,15 @@ def render_structured(result: dict[str, Any], cached: bool) -> None:
         assumptions = result["summary"].get("assumptions") or []
         if assumptions:
             st.markdown("**Assumptions**\n" + "\n".join(f"- {a}" for a in assumptions))
+        if caption:
+            st.caption(caption)
 
 
 def render_message(message: dict[str, Any]) -> None:
     """Render one stored message according to its kind."""
     kind = message.get("kind", "text")
     if kind == "structured":
-        render_structured(message["result"], message["cached"])
+        render_structured(message["result"], message["cached"], message.get("caption"))
     elif kind == "error":
         st.error(message["content"])
     else:
@@ -161,8 +177,9 @@ def render_message(message: dict[str, Any]) -> None:
         )
 
 
-def store_message(role: str, **fields: Any) -> None:
-    st.session_state.messages.append({"role": role, "timestamp": now(), **fields})
+def store_message(role: str, target: str = "messages", **fields: Any) -> None:
+    """Append a timestamped message to the chat history kept under ``target``."""
+    st.session_state[target].append({"role": role, "timestamp": now(), **fields})
 
 
 def extract_usage(final_event: dict[str, Any]) -> tuple[dict[str, Any], float]:
@@ -254,12 +271,11 @@ def handle_prompt(prompt: str, mode: str) -> None:
 def render_mode_switch() -> str:
     with st.sidebar:
         st.header("⚙️ Controls & Info")
-        return st.radio("Response mode", [MODE_STREAMING, MODE_STRUCTURED])
+        return st.radio("Response mode", [MODE_CONVERSATION, MODE_STREAMING, MODE_STRUCTURED])
 
 
 def reset_conversation() -> None:
-    for key, value in session_defaults().items():
-        st.session_state[key] = value
+    apply_state(session_defaults(), overwrite=True)
 
 
 def render_last_call(last: dict[str, Any]) -> None:
@@ -302,12 +318,157 @@ def render_sidebar_info() -> None:
         )
 
 
+def conversation_defaults() -> dict[str, Any]:
+    return {
+        CONVERSATION_KEY: [],
+        "project_metadata": None,
+        "turns": 0,
+        "session_error": None,
+        "input_nonce": 0,
+    }
+
+
+def open_session() -> None:
+    """Create an API session and reset its memory view; keep a safe error if it fails."""
+    started = estimate_client.create_session()
+    st.session_state.session_id = started.session_id
+    st.session_state.session_error = started.error
+    st.session_state.project_metadata = None
+    st.session_state.turns = 0
+
+
+def start_new_conversation() -> None:
+    apply_state(conversation_defaults(), overwrite=True)
+    open_session()
+    st.session_state.input_nonce += 1
+
+
+def ensure_session() -> None:
+    """Create the session lazily, once per browser session (retried while it is missing)."""
+    apply_state(conversation_defaults())
+    if st.session_state.get("session_id") is None:
+        open_session()
+
+
+def apply_session_answer(answer: estimate_client.SessionAnswer) -> bool:
+    """Store the outcome of a turn; return True when it succeeded."""
+    if answer.result is None:
+        store_message("assistant", CONVERSATION_KEY, kind="error", content=answer.error)
+        if answer.expired:
+            open_session()
+        return False
+    st.session_state.project_metadata = answer.project_metadata
+    st.session_state.turns = answer.turns
+    store_message(
+        "assistant",
+        CONVERSATION_KEY,
+        kind="structured",
+        result=answer.result,
+        cached=False,
+        caption=view_models.turn_caption(answer.turns),
+    )
+    return True
+
+
+def send_turn(text: str, hourly_rate: int, uploads: list[Any]) -> None:
+    files = [(f.name, f.getvalue(), f.type or "application/octet-stream") for f in uploads]
+    names = [name for name, _, _ in files]
+    store_message(
+        "user", CONVERSATION_KEY, kind="text", content=view_models.user_turn_text(text, names)
+    )
+    with st.spinner("Estimating... this can take up to a minute"):
+        answer = estimate_client.send_session_estimate(
+            st.session_state.session_id, text, hourly_rate, files
+        )
+    if apply_session_answer(answer):
+        st.session_state.input_nonce += 1
+    st.rerun()
+
+
+def render_conversation_inputs() -> None:
+    nonce = st.session_state.input_nonce
+    text = st.text_area(
+        "Message or meeting transcript",
+        key=f"transcript_{nonce}",
+        placeholder="Describe your project or the change you want re-estimated...",
+    )
+    uploads = st.file_uploader(
+        "Attachments (optional)",
+        type=ATTACHMENT_TYPES,
+        accept_multiple_files=True,
+        key=f"uploads_{nonce}",
+    )
+    rate = st.number_input(
+        "Hourly rate (USD)", MIN_HOURLY_RATE, MAX_HOURLY_RATE, DEFAULT_HOURLY_RATE
+    )
+    if not st.button("Send", type="primary"):
+        return
+    if not text.strip():
+        st.warning("Write a message first.")
+    elif st.session_state.session_id is None:
+        st.error(st.session_state.session_error or view_models.GENERIC_ERROR)
+    else:
+        send_turn(text, int(rate), uploads)
+
+
+def render_conversation() -> None:
+    ensure_session()
+    if st.session_state.session_error:
+        st.error(st.session_state.session_error)
+    messages = st.session_state[CONVERSATION_KEY]
+    if not messages:
+        st.info("👋 Describe your project. Follow-up messages build on what was agreed before.")
+    for message in messages:
+        render_message(message)
+    render_conversation_inputs()
+
+
+def refresh_memory() -> None:
+    snapshot = estimate_client.get_session(st.session_state.session_id)
+    if snapshot.expired:
+        store_message("assistant", CONVERSATION_KEY, kind="error", content=snapshot.error)
+        open_session()
+    elif snapshot.error is None:
+        st.session_state.project_metadata = snapshot.project_metadata
+        st.session_state.turns = snapshot.turns
+
+
+def render_memory_panel() -> None:
+    with st.expander("🧠 Project memory (project_metadata)", expanded=True):
+        for label, value in view_models.metadata_rows(st.session_state.project_metadata):
+            st.markdown(f"**{label}:** {value}")
+        session_id = st.session_state.session_id
+        st.caption(
+            f"Session {view_models.short_session_id(session_id)} · "
+            f"{st.session_state.turns} turn(s)"
+        )
+        st.caption(
+            "This memory is kept separately from the sliding-window history (the last "
+            "turns) that the model also sees."
+        )
+        if session_id and st.button("Refresh memory", use_container_width=True):
+            refresh_memory()
+            st.rerun()
+
+
+def render_conversation_sidebar() -> None:
+    with st.sidebar:
+        if st.button("🆕 New conversation", use_container_width=True):
+            start_new_conversation()
+            st.rerun()
+        render_memory_panel()
+
+
 def main() -> None:
     init_session_state()
     mode = render_mode_switch()
     st.title("💬 Ready to estimate your projects?")
     st.markdown("**Your AI assistant, expert in software project estimation**")
     st.divider()
+    if mode == MODE_CONVERSATION:
+        render_conversation()
+        render_conversation_sidebar()
+        return
     if not st.session_state.messages:
         st.info("👋 Start a conversation by describing your project below!")
     for message in st.session_state.messages:

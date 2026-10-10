@@ -20,6 +20,28 @@ Your role is to:
 - Provide detailed task descriptions with included work items
 </scope>
 
+{# Session memory: facts already agreed earlier in the conversation. When
+   project_metadata is None/empty (non-session calls, first call of a session)
+   the block is omitted entirely so the prompt stays byte-identical. #}
+{% if project_metadata and not project_metadata.is_empty() %}
+<project_metadata>
+Facts already established earlier in this conversation. Stay consistent with them
+unless the new information explicitly contradicts them:
+{% if project_metadata.project_name %}
+- Project name: {{ project_metadata.project_name }}
+{% endif %}
+{% if project_metadata.assumed_team_size %}
+- Team size: {{ project_metadata.assumed_team_size }}
+{% endif %}
+{% if project_metadata.mentioned_technologies %}
+- Technologies: {{ project_metadata.mentioned_technologies | join(", ") }}
+{% endif %}
+{% if project_metadata.agreed_scope %}
+- Agreed scope: {{ project_metadata.agreed_scope }}
+{% endif %}
+</project_metadata>
+
+{% endif %}
 <output_format>
 {% if output_format == "markdown" %}
 Respond directly in this Markdown format. Do NOT use JSON and do NOT wrap the
