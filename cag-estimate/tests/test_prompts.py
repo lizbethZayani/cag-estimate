@@ -7,6 +7,7 @@ from jinja2 import UndefinedError
 
 from cag_estimate.context.examples import ESTIMATION_EXAMPLES
 from cag_estimate.prompts import loader, render_estimation_prompt, render_system_prompt
+from cag_estimate.schemas.acb import CriticFeedback, CriticIssue
 from cag_estimate.schemas.estimation import EstimationRequest
 from cag_estimate.schemas.session import ProjectMetadata
 
@@ -168,9 +169,7 @@ def test_v1_ignores_the_tier() -> None:
 
 def test_v2_system_keeps_the_v1_schema_rules_and_metadata() -> None:
     v1, _ = render_estimation_prompt(make_request(), project_metadata=make_metadata())
-    v2, _ = render_estimation_prompt(
-        make_request(), version="v2", project_metadata=make_metadata()
-    )
+    v2, _ = render_estimation_prompt(make_request(), version="v2", project_metadata=make_metadata())
     assert v2.startswith(v1.rstrip("\n"))
     assert "<output_schema>" in v2
     assert "<project_metadata>" in v2
@@ -213,3 +212,52 @@ def test_render_system_prompt_supports_v2() -> None:
     system = render_system_prompt(make_metadata(), version="v2")
     assert "<conversation_rules>" in system
     assert "Booking Hub" in system
+
+
+V2_PROMPT_SHA256 = (
+    "6aa77de4784d950a2c5de1cbbf5762ff925a8d7861cdd604ad9a3b10c2f97926",
+    "53f1cccb5bcb52ece56cfadbda550d0f630b8f10c9be2ceb615b7754fc961038",
+)
+
+
+def make_feedback() -> CriticFeedback:
+    issue = CriticIssue(
+        category="missing_task",
+        severity="major",
+        field_path="tasks[2].name",
+        description="The reporting module has no task.",
+        suggested_fix="Add a reporting task.",
+    )
+    return CriticFeedback(verdict="needs_iteration", issues=[issue], confidence_in_review=75)
+
+
+def test_v2_without_feedback_stays_byte_identical() -> None:
+    system, user = render_estimation_prompt(make_request(), version="v2")
+    assert (_sha256(system), _sha256(user)) == V2_PROMPT_SHA256
+    assert render_estimation_prompt(make_request(), version="v2", critic_feedback=None) == (
+        system,
+        user,
+    )
+
+
+def test_v2_user_prompt_lists_the_critic_feedback() -> None:
+    _, user = render_estimation_prompt(
+        make_request(), version="v2", critic_feedback=make_feedback()
+    )
+    block = user.split("<critic_feedback>")[1].split("</critic_feedback>")[0]
+    assert "[major] missing_task (tasks[2].name): The reporting module has no task." in block
+    assert "Suggested fix: Add a reporting task." in block
+    assert "Address" in block and "do not repeat" in block
+
+
+def test_v2_critic_feedback_omits_the_fix_line_when_there_is_none() -> None:
+    feedback = make_feedback()
+    feedback.issues[0].suggested_fix = None
+    _, user = render_estimation_prompt(make_request(), version="v2", critic_feedback=feedback)
+    assert "Suggested fix" not in user
+
+
+def test_v1_ignores_the_critic_feedback() -> None:
+    assert render_estimation_prompt(
+        make_request(), critic_feedback=make_feedback()
+    ) == render_estimation_prompt(make_request())

@@ -12,6 +12,7 @@ from typing import Any, Literal, get_args
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from cag_estimate.context.examples import ESTIMATION_EXAMPLES
+from cag_estimate.schemas.acb import CriticFeedback
 from cag_estimate.schemas.estimation import (
     COMPLEXITY_HOURS,
     MAX_HOURLY_RATE,
@@ -75,6 +76,7 @@ def render_estimation_prompt(
     output_format: OutputFormat = "json",
     project_metadata: ProjectMetadata | None = None,
     tier: str | None = None,
+    critic_feedback: CriticFeedback | None = None,
 ) -> tuple[str, str]:
     """Render the ``(system, user)`` prompts for the estimation use case.
 
@@ -88,6 +90,8 @@ def render_estimation_prompt(
             so non-session output is byte-identical to the pre-session prompt.
         tier: Audience tier name (a ``Tier`` is a ``str``). Only ``v2`` uses it; ``None``
             renders the balanced audience, and ``v1`` ignores it.
+        critic_feedback: The latest review of a previous draft. Only ``v2`` uses
+            it, to add a ``<critic_feedback>`` block; ``None`` renders nothing.
 
     Raises:
         ValueError: If the version or the output format is unknown.
@@ -96,6 +100,7 @@ def render_estimation_prompt(
         **_context(output_format, project_metadata, tier),
         "description": request.transcription,
         "hourly_rate": request.hourly_rate,
+        "critic_feedback": critic_feedback,
     }
     return (
         _render("estimation", "system", version, context),
@@ -144,4 +149,31 @@ def render_summary_prompt(
     return (
         _render("conversation_summary", "system", version, context),
         _render("conversation_summary", "user", version, context),
+    )
+
+
+def render_critic_prompt(
+    *,
+    transcript: str,
+    metadata: ProjectMetadata,
+    tier: str,
+    previous_digest: str | None,
+    estimate_digest: str,
+    version: str = "v1",
+) -> tuple[str, str]:
+    """Render the ``(system, user)`` prompts of the independent estimate auditor.
+
+    Raises:
+        ValueError: If the version is unknown.
+    """
+    context = {
+        "transcript": transcript,
+        "metadata": metadata,
+        "tier": tier,
+        "previous_digest": previous_digest,
+        "estimate_digest": estimate_digest,
+    }
+    return (
+        _render("critic", "system", version, context),
+        _render("critic", "user", version, context),
     )

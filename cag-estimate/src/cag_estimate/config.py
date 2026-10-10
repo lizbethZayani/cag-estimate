@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     attachment_max_chars_total: int = 80_000
     # Longest transcript accepted by the session estimate endpoint, in characters.
     transcript_max_chars: int = 80_000
+    # Reviewed estimates: actor drafts, critic audits, boss decides. 2 = one draft plus one
+    # directed retry (worst case 2 actor + 2 critic calls).
+    acb_max_iterations: int = 2
+    # Model for the critic calls (use a cheap one); None = the router's primary model.
+    critic_model: str | None = None
     app_env: str = "development"
     log_level: str = "DEBUG"
 

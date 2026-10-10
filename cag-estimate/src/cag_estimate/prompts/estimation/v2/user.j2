@@ -1,2 +1,15 @@
 {% include "estimation/v1/user.j2" %}
+{% if critic_feedback %}
+
+<critic_feedback>
+An independent reviewer found problems in your previous draft. Address each one before answering and do not repeat these mistakes:
+{% for issue in critic_feedback.issues %}
+- [{{ issue.severity }}] {{ issue.category }} ({{ issue.field_path }}): {{ issue.description }}
+{% if issue.suggested_fix %}
+  Suggested fix: {{ issue.suggested_fix }}
+{% endif %}
+{% endfor %}
+</critic_feedback>
+
+{% endif %}
 Integrate the conversation history and the project metadata, and return the full updated estimate for everything agreed so far.

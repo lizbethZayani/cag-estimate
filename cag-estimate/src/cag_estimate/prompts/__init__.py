@@ -2,6 +2,7 @@
 
 from cag_estimate.prompts.loader import (
     SummaryTurn,
+    render_critic_prompt,
     render_estimation_prompt,
     render_summary_prompt,
     render_system_prompt,
@@ -9,6 +10,7 @@ from cag_estimate.prompts.loader import (
 
 __all__ = [
     "SummaryTurn",
+    "render_critic_prompt",
     "render_estimation_prompt",
     "render_summary_prompt",
     "render_system_prompt",

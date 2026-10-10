@@ -465,6 +465,15 @@ The tier comes from `services/tier_resolver.py`, a **heuristic** (vocabulary cue
 
 Cues are matched case-insensitively on whole words. A mixed message goes to its most senior reader (executive beats pm beats developer). The resolved tier and the rule that decided it are stored on the session after a successful turn only: `GET /sessions/{id}` returns `last_tier` and `last_tier_rule` (`null` before the first turn) and the estimate response returns `resolved_tier` and `tier_rule`. In the Streamlit "Conversation (memory)" mode, the **Audience** selector (Auto, Executive, PM, Developer) sends `tier` only when not on Auto, and the memory panel shows the resolved tier.
 
+### Reviewed estimates (actor-critic)
+
+The building blocks for estimates that are audited before they are returned. The HTTP endpoint that uses them comes in a later stage; today they are library code with offline tests.
+
+- **Actor**: the normal session estimator. On a retry it receives the critic's latest review in an optional `<critic_feedback>` block of the `v2` user prompt (severity, category, field path, description and suggested fix of each issue).
+- **Critic** (`services/critic.py`): an independent auditor, one structured LLM call per draft, with the transcript and the estimates treated as data, never instructions. It returns a verdict (`accept`, `needs_iteration`, `reject`) and issues in eight categories: `math_error`, `hallucination`, `scope_mismatch`, `missing_task`, `history_inconsistency`, `unrealistic_estimate`, `missing_assumption`, `tier_mismatch`. `needs_iteration` requires at least one critical or major issue. If the critic call fails for any reason, the draft is accepted and the trace flags it (`critic_failed`).
+- **Boss** (`services/boss.py`): makes no LLM call. `accept` returns the draft; `needs_iteration` asks the actor for a new draft while iterations remain; `reject`, or an exhausted budget, returns the LAST draft unmodified and lists the open issues in `BossTrace.caveats` (at most 5).
+- `ACB_MAX_ITERATIONS` (default `2`) is one draft plus one directed retry, so the worst case is 2 actor and 2 critic calls. `CRITIC_MODEL` selects a cheaper model for the critic.
+
 ### Caching and volatility
 
 - **Session estimates bypass the exact and semantic caches.** The answer depends on the history and the accumulated metadata, not only on the submitted text, so a cache keyed on the text could serve an answer from another context.
@@ -473,7 +482,7 @@ Cues are matched case-insensitively on whole words. A mixed message goes to its 
 
 ### Configuration
 
-`SESSION_MAX_TURNS`, `SESSION_MAX_SESSIONS`, `SESSION_IDLE_TTL_SECONDS`, `SESSION_COMPRESSION_ENABLED`, `SESSION_MAX_ANCHORS`, `SESSION_SUMMARY_MAX_CHARS`, `SESSION_SUMMARY_MODE`, `SESSION_SUMMARY_MODEL`, `ATTACHMENT_MAX_FILES`, `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_MAX_CHARS_TOTAL`, `TRANSCRIPT_MAX_CHARS` and `LLM_STRUCTURED_MAX_TOKENS` are listed in [Environment Variables](#environment-variables). `docker-compose.yml` passes them to the `api` service with the defaults shown there. The structured token limit matters in conversations: later turns can produce larger estimates, and a limit that is too low truncates the JSON and fails the request.
+`SESSION_MAX_TURNS`, `SESSION_MAX_SESSIONS`, `SESSION_IDLE_TTL_SECONDS`, `SESSION_COMPRESSION_ENABLED`, `SESSION_MAX_ANCHORS`, `SESSION_SUMMARY_MAX_CHARS`, `SESSION_SUMMARY_MODE`, `SESSION_SUMMARY_MODEL`, `ATTACHMENT_MAX_FILES`, `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_MAX_CHARS_TOTAL`, `TRANSCRIPT_MAX_CHARS`, `ACB_MAX_ITERATIONS`, `CRITIC_MODEL` and `LLM_STRUCTURED_MAX_TOKENS` are listed in [Environment Variables](#environment-variables). `docker-compose.yml` passes them to the `api` service with the defaults shown there. The structured token limit matters in conversations: later turns can produce larger estimates, and a limit that is too low truncates the JSON and fails the request.
 
 ### Tests
 
@@ -656,6 +665,8 @@ The checks below are now enforced in the code: the schema validators (`schemas/e
 | `ATTACHMENT_MAX_BYTES` | Bytes per attachment | `5000000` |
 | `ATTACHMENT_MAX_CHARS_TOTAL` | Characters of transcript plus attachment text | `80000` |
 | `TRANSCRIPT_MAX_CHARS` | Longest transcript accepted by the session estimate endpoint | `80000` |
+| `ACB_MAX_ITERATIONS` | Reviewed estimates: drafts the actor may produce (`2` = one draft plus one directed retry; worst case 2 actor + 2 critic calls) | `2` |
+| `CRITIC_MODEL` | Model for the critic calls; use a cheap one. Empty = the primary model | empty |
 | `REDIS_URL` | Redis (Stack) URL | `redis://localhost:6379/0` |
 | `CACHE_TTL_SECONDS` | Exact-cache TTL | `86400` |
 | `EMBEDDING_MODEL` | Embedding model for the semantic cache | `text-embedding-3-small` |
