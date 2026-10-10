@@ -14,7 +14,7 @@ from cag_estimate.prompts import render_estimation_prompt
 from cag_estimate.schemas.estimation import EstimationRequest, ProjectEstimation
 from cag_estimate.schemas.session import SessionEstimationResponse
 from cag_estimate.services.attachments import ExtractedAttachment, build_combined_transcript
-from cag_estimate.services.estimation import MAX_TOKENS, PROMPT_VERSION
+from cag_estimate.services.estimation import PROMPT_VERSION
 from cag_estimate.services.llm_wrapper import LLMWrapper
 from cag_estimate.services.metadata_extractor import extract_metadata
 from cag_estimate.services.sessions import Session
@@ -81,7 +81,6 @@ class SessionEstimationService:
             system_prompt=system,
             user_message=user,
             response_model=ProjectEstimation,
-            max_tokens=MAX_TOKENS,
             history=session.messages_for_llm()[1:],
         )
         return result
