@@ -14,6 +14,15 @@ Summary of what was built against `practice5.md`, the deliberate decisions, and 
 | 6. Client | Streamlit "Conversation (memory)" mode: lazy session, text area, multi-file uploader, `project_metadata` expander, "New conversation". |
 | 7. Tests | `tests/test_session_integration.py` (three required tests) and `tests/test_sessions_endpoints.py`, all offline. |
 
+## Audience tier and prompt v2
+
+- **Problem (live evidence).** Follow-ups in a real session were estimated like separate small projects (182, 124, 126, 172 hours) instead of the updated full estimate.
+- **Prompt v2 for sessions only.** `prompts/estimation/v2/system.j2` includes the `v1` system prompt and adds `<conversation_rules>` (history is context, metadata is the source of truth unless corrected, always return the updated FULL estimate, keep earlier tasks, stable `project_name`) and an `<audience>` block per tier. `v2/user.j2` adds a closing line asking for the full updated estimate. `v1` is untouched and pinned by a byte-level test; the non-session endpoints keep it. `SESSION_PROMPT_VERSION = "v2"` is a constant in `session_estimation.py` (nothing needs to switch it per deployment); the session store's system-prompt provider uses the same version.
+- **Tier resolver.** `services/tier_resolver.py`: an ordered, data-driven rule chain (`override`, `executive_cues`, `pm_cues`, `developer_cues`, `technology_count`, then `default`); it returns the tier and the name of the deciding rule. It is a heuristic over vocabulary, pure and offline.
+- **API.** Optional form field `tier` (invalid value: `422`); snapshot adds `last_tier` and `last_tier_rule`; the estimate response adds `resolved_tier` and `tier_rule`. State is set only after a successful turn.
+- **UI.** "Audience" selector in conversation mode (Auto sends nothing); the memory panel shows the resolved tier.
+- **Limit.** The prompt asks for the full estimate but the model can still drift; the live check is the evidence, not the unit tests (they use a fake LLM).
+
 ## Deliberate decisions
 
 - **Path B for attachments.** Provider-agnostic with the Anthropic to OpenAI fallback, testable offline, and the guardrails see the document text.

@@ -14,12 +14,16 @@ from cag_estimate.prompts import render_estimation_prompt
 from cag_estimate.schemas.estimation import EstimationRequest, ProjectEstimation
 from cag_estimate.schemas.session import SessionEstimationResponse
 from cag_estimate.services.attachments import ExtractedAttachment, build_combined_transcript
-from cag_estimate.services.estimation import PROMPT_VERSION
 from cag_estimate.services.llm_wrapper import LLMWrapper
 from cag_estimate.services.metadata_extractor import extract_metadata
 from cag_estimate.services.session_compression import HistoryCompactor
 from cag_estimate.services.sessions import Session
+from cag_estimate.services.tier_resolver import Tier, resolve_tier
 
+# Sessions use the conversational prompt (updated FULL estimate + audience); the
+# non-session /estimate path keeps v1. A constant, not a setting: nothing needs
+# to switch it per deployment, and the response reports the version used.
+SESSION_PROMPT_VERSION = "v2"
 MAX_HISTORY_TRANSCRIPT_CHARS = 4000
 _TRUNCATION_MARKER = "\n[... transcript truncated in conversation history ...]"
 
@@ -59,8 +63,11 @@ class SessionEstimationService:
         transcript: str,
         attachments: list[ExtractedAttachment],
         hourly_rate: int,
+        tier: Tier | None = None,
     ) -> SessionEstimationResponse:
-        """Estimate within ``session``; history and metadata change only on success.
+        """Estimate within ``session``; history, metadata and tier change only on success.
+
+        The audience tier is resolved on the combined text (``tier`` overrides it).
 
         The session lock is held for the whole read-modify-write, so concurrent
         requests on one session run one after another.
@@ -68,11 +75,17 @@ class SessionEstimationService:
         with session.lock:
             combined = build_combined_transcript(transcript, attachments)
             check_input(combined, openai_client=self.moderation_client)
-            result = enforce_output(self._generate(session, combined, hourly_rate), hourly_rate)
+            resolved, rule = resolve_tier(combined, session.metadata, tier)
+            result = enforce_output(
+                self._generate(session, combined, hourly_rate, resolved), hourly_rate
+            )
             self._remember(session, transcript, attachments, combined, result)
+            session.last_resolved_tier, session.last_tier_rule = resolved, rule
             return SessionEstimationResponse(
                 result=result,
-                prompt_version=PROMPT_VERSION,
+                prompt_version=SESSION_PROMPT_VERSION,
+                resolved_tier=resolved,
+                tier_rule=rule,
                 cached=False,
                 session_id=session.session_id,
                 project_metadata=session.metadata.model_copy(deep=True),
@@ -80,10 +93,15 @@ class SessionEstimationService:
                 attachments=[attachment.filename for attachment in attachments],
             )
 
-    def _generate(self, session: Session, combined: str, hourly_rate: int) -> ProjectEstimation:
+    def _generate(
+        self, session: Session, combined: str, hourly_rate: int, tier: Tier
+    ) -> ProjectEstimation:
         request = EstimationRequest(transcription=combined, hourly_rate=hourly_rate)
         system, user = render_estimation_prompt(
-            request, version=PROMPT_VERSION, project_metadata=session.metadata
+            request,
+            version=SESSION_PROMPT_VERSION,
+            project_metadata=session.metadata,
+            tier=tier,
         )
         result, _meta = self.wrapper.complete_structured(
             system_prompt=system,

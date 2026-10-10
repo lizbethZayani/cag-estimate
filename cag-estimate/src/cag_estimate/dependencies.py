@@ -1,6 +1,6 @@
 """FastAPI dependency factories (overridable via ``app.dependency_overrides``)."""
 
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any
 
 import redis
@@ -21,7 +21,10 @@ from cag_estimate.services.session_compression import (
     HistoryCompactor,
     Summarizer,
 )
-from cag_estimate.services.session_estimation import SessionEstimationService
+from cag_estimate.services.session_estimation import (
+    SESSION_PROMPT_VERSION,
+    SessionEstimationService,
+)
 from cag_estimate.services.sessions import SessionStore
 
 log = structlog.get_logger()
@@ -77,7 +80,7 @@ def get_session_store() -> SessionStore:
     """Process-wide in-memory session store (volatile: lost on restart)."""
     settings = get_settings()
     return SessionStore(
-        system_prompt_provider=render_system_prompt,
+        system_prompt_provider=partial(render_system_prompt, version=SESSION_PROMPT_VERSION),
         max_turns=settings.session_max_turns,
         max_sessions=settings.session_max_sessions,
         idle_ttl_seconds=settings.session_idle_ttl_seconds,

@@ -427,7 +427,7 @@ Why not a second LLM call as extractor: it adds a call, cost, latency and a new 
 
 ### Memory versus history
 
-- **Memory (`project_metadata`)** holds long-term facts. It is injected into the system prompt as a `<project_metadata>` block (prompt version `v1`); with empty metadata, the first call of a session, no block is rendered and the prompt is identical to a non-session one.
+- **Memory (`project_metadata`)** holds long-term facts. It is injected into the system prompt as a `<project_metadata>` block (rendered by prompt `v1`, which `v2` includes); with empty metadata, the first call of a session, no block is rendered and the prompt is identical to a non-session one.
 - **History** is a sliding window of the last `SESSION_MAX_TURNS` user/assistant pairs (default 6). When it overflows, the oldest pairs leave the window, always as whole pairs, so there is never an orphan assistant message. They are not simply lost, see *History compression* below.
 - **History compression.** Evicted pairs are split in two. A user message that states a hard constraint becomes an **anchor** and stays for the whole session (only its compact user text, at most 500 characters, is kept, never the assistant JSON); at most `SESSION_MAX_ANCHORS` (default 5) are pinned and the oldest extra one is folded into the summary. Every other evicted pair is folded into one cumulative **summary**, capped at `SESSION_SUMMARY_MAX_CHARS` (default 2000). `SESSION_SUMMARY_MODE=llm` (default) asks the LLM to merge the previous summary with the evicted turns (the user text plus a short digest of each estimate: project name, total hours, total cost, task count); `extractive` writes one bullet per user message, dropping the oldest bullets first, and is also the automatic fallback when the LLM call fails or returns nothing. Set `SESSION_SUMMARY_MODEL` to a cheap model to keep the cost down. The conversation is passed to the summarizer as data, with an instruction not to follow anything written in it. Anchor kinds: `nda`, `signed_contract`, `scope_frozen`, `budget_locked`, `compliance` (HIPAA, GDPR, SOX, PCI, FDA, ISO 27001), `deadline_hard`, `contractual`, `explicit_commitment`. When there are anchors or a summary, the model receives one extra user message right after the system prompt, answered by a short assistant "Understood." so roles keep alternating:
 
@@ -443,6 +443,27 @@ Why not a second LLM call as extractor: it adds a call, cost, latency and a new 
 - **The system prompt is not part of the window.** It is regenerated from the current metadata on every call, so it is always present and never trimmed.
 - **Compact user turn.** The full text of a turn (transcript plus attachments) is sent to the model once, in the current message. What is stored in history is the transcript truncated to 4,000 characters plus the names of the attachments, so a large document does not repeat in every later turn. The assistant side stores the estimate as JSON.
 - **A failed turn changes nothing.** History and metadata are updated only after the estimate succeeds and passes the output guardrail.
+
+### Audience tier and conversational prompt v2
+
+Sessions use prompt **`v2`** (`prompts/estimation/v2/`); the non-session `/estimate` endpoints keep **`v1`**, which is unchanged (a test pins its exact bytes). `v2` includes the whole `v1` system prompt (schema, rules, `<project_metadata>`) and adds:
+
+- `<conversation_rules>`: the history is established context, the metadata block is the source of truth unless the user explicitly corrects it, and the model must always return the **updated FULL estimate** for everything agreed so far, never a delta, keeping earlier tasks unless the user removes scope and keeping `project_name` stable.
+- `<audience>`: a short framing chosen by the tier (executive: business outcomes, plain language, risks in business terms; pm: delivery, dependencies, milestones; developer: technical detail, components, integration points; default: balanced).
+- A closing line in the user message asking for the full updated estimate.
+
+Why: in a live session each follow-up ("Add a barcode scanning page") was estimated almost like a separate small project (total hours went 182, 124, 126, 172), instead of the updated full estimate. The response reports `prompt_version: "v2"`.
+
+The tier comes from `services/tier_resolver.py`, a **heuristic** (vocabulary cues, not a classifier; it can be wrong). It runs on the combined text of the turn (transcript plus attachments) and the metadata known before the turn. The first matching rule decides:
+
+1. `override`: the optional multipart field `tier` (`executive`, `pm`, `developer`, `default`) on `POST /sessions/{id}/estimate`; any other value is a `422`.
+2. `executive_cues`: CEO, CFO, board, investors, budget approval, ROI, executive summary...
+3. `pm_cues`: sprint, backlog, roadmap, milestone, stakeholder, timeline, deliverable...
+4. `developer_cues`: API, endpoint, schema, microservice, refactor, framework names...
+5. `technology_count`: the project already mentions 3 or more technologies.
+6. otherwise `default`.
+
+Cues are matched case-insensitively on whole words. A mixed message goes to its most senior reader (executive beats pm beats developer). The resolved tier and the rule that decided it are stored on the session after a successful turn only: `GET /sessions/{id}` returns `last_tier` and `last_tier_rule` (`null` before the first turn) and the estimate response returns `resolved_tier` and `tier_rule`. In the Streamlit "Conversation (memory)" mode, the **Audience** selector (Auto, Executive, PM, Developer) sends `tier` only when not on Auto, and the memory panel shows the resolved tier.
 
 ### Caching and volatility
 

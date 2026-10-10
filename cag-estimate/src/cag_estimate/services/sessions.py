@@ -16,6 +16,7 @@ import structlog
 
 from cag_estimate.config import DEFAULT_SESSION_MAX_SESSIONS, DEFAULT_SESSION_MAX_TURNS
 from cag_estimate.schemas.session import ProjectMetadata
+from cag_estimate.services.tier_resolver import Tier
 
 log = structlog.get_logger()
 
@@ -136,6 +137,9 @@ class Session:
         self._clock = clock
         self.created_at = clock()
         self.updated_at = self.created_at
+        # Audience tier of the last successful turn (None before the first one).
+        self.last_resolved_tier: Tier | None = None
+        self.last_tier_rule: str | None = None
         # Held by callers for a whole read-modify-write (e.g. one estimate) so
         # concurrent requests on the same session cannot interleave their turns.
         self.lock = threading.Lock()

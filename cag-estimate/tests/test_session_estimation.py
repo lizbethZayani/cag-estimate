@@ -22,6 +22,7 @@ from cag_estimate.services.session_estimation import (
     SessionEstimationService,
 )
 from cag_estimate.services.sessions import Session
+from cag_estimate.services.tier_resolver import Tier
 from tests.conftest import build_estimation
 
 
@@ -250,3 +251,70 @@ def test_compaction_failure_never_changes_the_successful_turn():
 
     assert response.turns == 1
     assert session.history.summary == "- first plain"
+
+
+def _audience(call: dict[str, Any]) -> str:
+    return call["system_prompt"].split("<audience>")[1].split("</audience>")[0]
+
+
+def test_session_turns_use_prompt_v2_and_report_it():
+    wrapper = FakeWrapper()
+
+    response = SessionEstimationService(wrapper).estimate(make_session(), "Build a portal", [], 40)
+
+    assert response.prompt_version == "v2"
+    assert "<conversation_rules>" in wrapper.calls[0]["system_prompt"]
+    assert "full updated estimate" in wrapper.calls[0]["user_message"]
+
+
+def test_resolved_tier_is_stored_and_shapes_the_audience_block():
+    wrapper = FakeWrapper()
+    session = make_session()
+
+    response = SessionEstimationService(wrapper).estimate(
+        session, "The CEO wants the ROI for the board", [], 40
+    )
+
+    assert session.last_resolved_tier is Tier.EXECUTIVE
+    assert session.last_tier_rule == "executive_cues"
+    assert "business outcomes" in _audience(wrapper.calls[0])
+    assert (response.resolved_tier, response.tier_rule) == ("executive", "executive_cues")
+
+
+def test_tier_is_resolved_on_the_combined_text_with_attachments():
+    wrapper = FakeWrapper()
+    session = make_session()
+    attachment = ExtractedAttachment("plan.txt", "Sprint backlog and milestones")
+
+    SessionEstimationService(wrapper).estimate(session, "Build a portal", [attachment], 40)
+
+    assert session.last_resolved_tier is Tier.PM
+
+
+def test_explicit_tier_override_wins():
+    wrapper = FakeWrapper()
+    session = make_session()
+
+    response = SessionEstimationService(wrapper).estimate(
+        session, "The CEO wants the ROI", [], 40, tier=Tier.DEVELOPER
+    )
+
+    assert (session.last_resolved_tier, session.last_tier_rule) == (Tier.DEVELOPER, "override")
+    assert "integration points" in _audience(wrapper.calls[0])
+    assert response.resolved_tier == "developer"
+
+
+def test_failed_turn_leaves_the_last_tier_untouched():
+    session = make_session()
+    SessionEstimationService(FakeWrapper()).estimate(session, "Build a portal", [], 40)
+    failing = SessionEstimationService(FakeWrapper(error=RuntimeError("boom")))
+
+    with pytest.raises(RuntimeError):
+        failing.estimate(session, "The CEO wants the ROI", [], 40)
+
+    assert (session.last_resolved_tier, session.last_tier_rule) == (Tier.DEFAULT, "default")
+
+
+def test_new_session_has_no_resolved_tier():
+    session = make_session()
+    assert session.last_resolved_tier is None and session.last_tier_rule is None

@@ -26,6 +26,7 @@ from cag_estimate.services.attachments import (
 )
 from cag_estimate.services.session_estimation import SessionEstimationService
 from cag_estimate.services.sessions import Session, SessionNotFoundError, SessionStore
+from cag_estimate.services.tier_resolver import Tier
 
 log = structlog.get_logger()
 
@@ -43,6 +44,7 @@ ATTACHMENT_INVALID = "An attachment could not be read."
 
 Transcript = Annotated[str, Form()]
 HourlyRate = Annotated[int, Form(ge=MIN_HOURLY_RATE, le=MAX_HOURLY_RATE)]
+AudienceTier = Annotated[Tier | None, Form()]
 
 
 class SessionSnapshot(SessionCreated):
@@ -54,6 +56,8 @@ class SessionSnapshot(SessionCreated):
     message_count: int
     anchors_count: int
     summary_chars: int
+    last_tier: str | None
+    last_tier_rule: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -99,6 +103,8 @@ def get_session(session_id: str, store: Store) -> SessionSnapshot:
         message_count=turns * 2,
         anchors_count=len(session.history.anchors),
         summary_chars=len(session.history.summary or ""),
+        last_tier=session.last_resolved_tier,
+        last_tier_rule=session.last_tier_rule,
         created_at=session.created_at,
         updated_at=session.updated_at,
     )
@@ -119,12 +125,14 @@ def estimate_in_session(
     service: Service,
     transcript: Transcript,
     hourly_rate: HourlyRate = 40,
+    tier: AudienceTier = None,
     attachments: Annotated[list[UploadFile] | None, File()] = None,
 ) -> SessionEstimationResponse | JSONResponse:
     """Estimate within a session (``multipart/form-data``: transcript + optional files).
 
     Attachments (PDF, DOCX, txt, md, csv, json) are converted to text and appended to
-    the transcript. Session estimates bypass the caches; the session is
+    the transcript. The optional ``tier`` field (executive, pm, developer, default)
+    forces the audience; without it the tier is inferred. Session estimates bypass the caches; the session is
     in-memory only. Errors: unknown session 404, too large 413, unsupported
     type 415, unreadable attachment or bad form 422, rejected input 400
     ``{"reason", "message"}``, any other failure a generic 502.
@@ -134,7 +142,7 @@ def estimate_in_session(
         _validate_transcript(transcript)
         session = _get_session(store, session_id)
         extracted = extract_uploads(uploads)
-        return service.estimate(session, transcript, extracted, hourly_rate)
+        return service.estimate(session, transcript, extracted, hourly_rate, tier)
     except AttachmentError as exc:
         log.info("session_attachment_rejected", error_type=type(exc).__name__)
         raise _attachment_http_error(exc) from exc

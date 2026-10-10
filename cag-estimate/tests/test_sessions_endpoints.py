@@ -366,3 +366,48 @@ def test_openapi_lists_session_routes() -> None:
     assert "post" in paths["/api/v1/sessions"]
     assert {"get", "delete"} <= set(paths["/api/v1/sessions/{session_id}"])
     assert "post" in paths["/api/v1/sessions/{session_id}/estimate"]
+
+
+async def test_snapshot_tier_fields_are_null_before_the_first_turn(
+    client: httpx.AsyncClient,
+) -> None:
+    session_id = await _new_session(client)
+    body = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert body["last_tier"] is None and body["last_tier_rule"] is None
+
+
+async def test_estimate_resolves_the_tier_and_the_snapshot_reports_it(
+    client: httpx.AsyncClient,
+) -> None:
+    session_id = await _new_session(client)
+    estimate = await client.post(
+        _estimate_url(session_id), data={"transcript": "The CEO wants the ROI."}
+    )
+    snapshot = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert estimate.json()["prompt_version"] == "v2"
+    assert estimate.json()["resolved_tier"] == "executive"
+    assert (snapshot["last_tier"], snapshot["last_tier_rule"]) == ("executive", "executive_cues")
+
+
+async def test_valid_tier_form_field_overrides_the_heuristic(
+    client: httpx.AsyncClient, wrapper: FakeWrapper
+) -> None:
+    session_id = await _new_session(client)
+    response = await client.post(
+        _estimate_url(session_id), data={"transcript": "The CEO wants the ROI.", "tier": "pm"}
+    )
+    snapshot = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert response.status_code == 200
+    assert (snapshot["last_tier"], snapshot["last_tier_rule"]) == ("pm", "override")
+    assert "dependencies" in wrapper.calls[0]["system_prompt"]
+
+
+async def test_invalid_tier_is_422_and_leaves_the_session_untouched(
+    client: httpx.AsyncClient, wrapper: FakeWrapper
+) -> None:
+    session_id = await _new_session(client)
+    response = await client.post(
+        _estimate_url(session_id), data={"transcript": TRANSCRIPT, "tier": "wizard"}
+    )
+    assert response.status_code == 422
+    assert not wrapper.calls

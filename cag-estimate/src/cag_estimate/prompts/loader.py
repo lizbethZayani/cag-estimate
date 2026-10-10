@@ -50,13 +50,16 @@ def _render(use_case: str, role: str, version: str, context: dict[str, Any]) -> 
     return template.render(**context)
 
 
-def _context(output_format: str, project_metadata: ProjectMetadata | None) -> dict[str, Any]:
+def _context(
+    output_format: str, project_metadata: ProjectMetadata | None, tier: str | None
+) -> dict[str, Any]:
     """Template variables shared by the system and user prompts."""
     if output_format not in _OUTPUT_FORMATS:
         raise ValueError(f"Unknown output_format: {output_format!r}")
     return {
         "output_format": output_format,
         "project_metadata": project_metadata,
+        "tier": tier,
         "examples": ESTIMATION_EXAMPLES,
         "complexity_hours": COMPLEXITY_HOURS,
         "min_tasks": MIN_TASKS,
@@ -71,6 +74,7 @@ def render_estimation_prompt(
     version: str = "v1",
     output_format: OutputFormat = "json",
     project_metadata: ProjectMetadata | None = None,
+    tier: str | None = None,
 ) -> tuple[str, str]:
     """Render the ``(system, user)`` prompts for the estimation use case.
 
@@ -82,12 +86,14 @@ def render_estimation_prompt(
         project_metadata: Facts known from earlier turns of a session. ``None``
             or empty metadata renders no ``<project_metadata>`` block at all,
             so non-session output is byte-identical to the pre-session prompt.
+        tier: Audience tier name (a ``Tier`` is a ``str``). Only ``v2`` uses it; ``None``
+            renders the balanced audience, and ``v1`` ignores it.
 
     Raises:
         ValueError: If the version or the output format is unknown.
     """
     context = {
-        **_context(output_format, project_metadata),
+        **_context(output_format, project_metadata, tier),
         "description": request.transcription,
         "hourly_rate": request.hourly_rate,
     }
@@ -101,6 +107,7 @@ def render_system_prompt(
     metadata: ProjectMetadata,
     version: str = "v1",
     output_format: OutputFormat = "json",
+    tier: str | None = None,
 ) -> str:
     """Render only the system prompt from session metadata (no request needed).
 
@@ -111,7 +118,7 @@ def render_system_prompt(
     Raises:
         ValueError: If the version or the output format is unknown.
     """
-    return _render("estimation", "system", version, _context(output_format, metadata))
+    return _render("estimation", "system", version, _context(output_format, metadata, tier))
 
 
 @dataclass(frozen=True)
