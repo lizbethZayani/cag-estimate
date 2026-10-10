@@ -280,10 +280,12 @@ Cache keys use the request inputs, not the rendered prompt text, so editing word
 | Rule | Value |
 |------|-------|
 | Task count | 3 to 20 |
-| Total hours | 8 to 500, and exactly the sum of the task hours |
+| Total hours | 8 to 500; derived from the task hours (see below) |
 | Hourly rate (in the result) | 30 to 150 |
 | Hours per complexity | Simple 4-24, Medium 10-64, High 16-112 |
 | `complexity` | `Simple`, `Medium` or `High` |
+
+`summary.total_hours` is derived, not trusted: when it differs from the sum of the task hours it is replaced by the sum (logged as `estimate_total_hours_corrected` with `claimed` and `computed`), and the 8 to 500 range is checked on the corrected value. Models often slip on this arithmetic and repeat the slip on every Instructor retry, which used to end as a 502. For the same reason a `summary` sent as a JSON-encoded string is parsed into the object. Every other rule still raises and triggers a retry.
 
 If retries are exhausted, the exception reaches the router and becomes a generic 502.
 

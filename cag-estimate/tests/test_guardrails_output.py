@@ -20,6 +20,22 @@ def test_cost_is_recomputed_from_hours_and_rate():
     assert fixed.summary.total_hours == 30
 
 
+def test_cost_uses_the_corrected_total_hours():
+    result = build_estimation(
+        total_cost=1,
+        summary={
+            "total_hours": 10,
+            "total_cost_usd": 1,
+            "team_size": "2 developers",
+            "estimated_duration_weeks": 2,
+            "hourly_rate": 40,
+        },
+    )
+    fixed = enforce_output(result, hourly_rate=40)
+    assert fixed.summary.total_hours == 30
+    assert fixed.summary.total_cost_usd == 1200
+
+
 def test_cost_uses_the_given_rate():
     assert enforce_output(build_estimation(), 50).summary.total_cost_usd == 1500
 
