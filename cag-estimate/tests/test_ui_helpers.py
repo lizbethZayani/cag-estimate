@@ -134,6 +134,12 @@ def test_session_status_messages_are_distinct_and_never_raw():
     assert "expired" in messages[404]
 
 
+def test_docx_is_an_accepted_attachment_type_and_named_in_the_415_message():
+    assert "docx" in view_models.ATTACHMENT_TYPES
+    message = view_models.session_status_error_message(415, None)
+    assert all(kind in message for kind in view_models.ATTACHMENT_TYPES)
+
+
 def test_session_status_message_400_uses_guardrail_reason():
     assert view_models.session_status_error_message(400, {"reason": "pii"}) == (
         view_models.guardrail_message("pii"))

@@ -340,7 +340,7 @@ Open **http://localhost:8501** in your browser.
 
 ## Conversation memory (sessions)
 
-Sessions let several estimates in one conversation share context: the model remembers the project across turns, and PDF or text attachments become part of the input.
+Sessions let several estimates in one conversation share context: the model remembers the project across turns, and PDF, Word (`.docx`) or text attachments become part of the input.
 
 ### Start the project and run the tests
 
@@ -358,7 +358,7 @@ PYTHONPATH=src uv run pytest -q
 
 `PYTHONPATH=src` is needed on macOS: `uv run` re-syncs the editable install and the generated `.pth` file gets the hidden flag, so Python skips it and `cag_estimate` is not importable without it.
 
-The Streamlit default mode, **Conversation (memory)**, creates a session lazily, offers a transcript box plus a multi-file uploader (`pdf`, `txt`, `md`, `csv`, `json`), shows the accumulated `project_metadata` in a sidebar expander, and has a **New conversation** button that opens a fresh session.
+The Streamlit default mode, **Conversation (memory)**, creates a session lazily, offers a transcript box plus a multi-file uploader (`pdf`, `docx`, `txt`, `md`, `csv`, `json`), shows the accumulated `project_metadata` in a sidebar expander, and has a **New conversation** button that opens a fresh session.
 
 ### Endpoints
 
@@ -372,7 +372,7 @@ Fields of `POST /api/v1/sessions/{id}/estimate`:
 
 - `transcript` (required): up to 80,000 characters, not blank.
 - `hourly_rate` (optional, default `40`): between the same bounds as `/estimate`.
-- `attachments` (optional, repeatable): PDF, `.txt`, `.md`, `.csv` or `.json`. Defaults: at most 5 files, 5,000,000 bytes per file, 80,000 characters for transcript plus attachment text combined.
+- `attachments` (optional, repeatable): PDF, `.docx`, `.txt`, `.md`, `.csv` or `.json` (legacy `.doc` is not supported). Defaults: at most 5 files, 5,000,000 bytes per file, 80,000 characters for transcript plus attachment text combined.
 
 The response is the regular estimation (`result`, `prompt_version`, `cached`, which is always `false` here) plus `session_id`, `project_metadata`, `turns` and `attachments` (the file names used).
 
@@ -382,7 +382,7 @@ The response is the regular estimation (`result`, `prompt_version`, `cached`, wh
 | 404 | Unknown session |
 | 413 | Too many files, a file or the combined text over the limits |
 | 415 | Unsupported attachment type |
-| 422 | Blank transcript, hourly rate out of bounds, or an unreadable attachment (corrupt PDF, or a PDF with no extractable text) |
+| 422 | Blank transcript, hourly rate out of bounds, or an unreadable attachment (corrupt PDF or `.docx`, or a document with no extractable text) |
 | 502 | Any other failure; the message is generic and never carries upstream detail |
 
 ```bash
@@ -405,10 +405,10 @@ curl -s "http://localhost:8000/api/v1/sessions/$SID"
 The practice brief offers two paths: A, upload files to a provider Files API and reference them in the message, or B, extract the text in our service and append it to the transcript. This project uses **Path B** ([`services/attachments.py`](src/cag_estimate/services/attachments.py)), because:
 
 - **Provider-agnostic.** The LLM layer is LiteLLM with an Anthropic to OpenAI fallback. A Files API is provider-specific, so a fallback call would not see the files.
-- **Offline-testable.** Text extraction (`pypdf` for PDFs, UTF-8 decoding for the text formats) runs without network, so the whole flow is covered by tests with a fake LLM.
+- **Offline-testable.** Text extraction (`pypdf` for PDFs, `python-docx` for `.docx`, UTF-8 decoding for the text formats) runs without network, so the whole flow is covered by tests with a fake LLM.
 - **Guardrails see the document.** Moderation, prompt-injection and PII checks run on the transcript plus the attachment text combined, so an attachment cannot smuggle in what the transcript could not.
 
-Each attachment is appended after the transcript as `--- attachment: <filename> ---` followed by its text. File names are sanitized (path components and control characters removed, runs of three or more dashes collapsed) so a name cannot fake a separator. Limits are enforced while reading (a file is never fully buffered past its limit) and again on the combined text. Scanned PDFs have no text layer and are rejected with `422`; there is no OCR.
+Each attachment is appended after the transcript as `--- attachment: <filename> ---` followed by its text. File names are sanitized (path components and control characters removed, runs of three or more dashes collapsed) so a name cannot fake a separator. Limits are enforced while reading (a file is never fully buffered past its limit) and again on the combined text. For `.docx`, the text of non-empty paragraphs comes first, followed by the table rows (cells joined with ` | `, one row per line); this keeps the code simple at the cost of losing the exact position of tables. Scanned PDFs have no text layer and are rejected with `422`; there is no OCR.
 
 ### How `project_metadata` is extracted
 

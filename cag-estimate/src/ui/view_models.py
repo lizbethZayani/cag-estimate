@@ -7,6 +7,8 @@ from typing import Any
 # bounds are mirrored here; tests assert they match cag_estimate.schemas.estimation.
 MIN_HOURLY_RATE, MAX_HOURLY_RATE = 30, 150
 
+ATTACHMENT_TYPES = ["pdf", "docx", "txt", "md", "csv", "json"]
+
 GENERIC_ERROR = "The estimation service is temporarily unavailable. Please try again."
 
 GUARDRAIL_MESSAGES = {
@@ -22,7 +24,10 @@ SESSION_EXPIRED_MESSAGE = "The session expired (the API restarted). Starting a n
 SESSION_STATUS_MESSAGES = {
     404: SESSION_EXPIRED_MESSAGE,
     413: "The attachments are too large or too many. Use up to 5 files of 5 MB each.",
-    415: "One of the attachments has an unsupported type. Use pdf, txt, md, csv or json.",
+    415: (
+        "One of the attachments has an unsupported type. "
+        f"Use {', '.join(ATTACHMENT_TYPES[:-1])} or {ATTACHMENT_TYPES[-1]}."
+    ),
     422: "The message or an attachment could not be read. Check them and try again.",
 }
 EMPTY_VALUE = "—"

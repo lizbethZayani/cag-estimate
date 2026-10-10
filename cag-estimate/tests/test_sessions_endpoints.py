@@ -14,7 +14,10 @@ from cag_estimate.services import attachments
 from cag_estimate.services.session_estimation import SessionEstimationService
 from cag_estimate.services.sessions import SessionStore
 from tests.conftest import build_estimation
+from tests.docx_helpers import build_docx
 from tests.pdf_helpers import build_pdf
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 TRANSCRIPT = "We need a bookstore web shop in Django with Stripe payments."
 
@@ -154,6 +157,34 @@ async def test_pdf_attachment_text_is_extracted(
     )
     assert response.status_code == 200
     assert "Invoice export required" in wrapper.calls[0]["user_message"]
+
+
+async def test_docx_attachment_text_is_extracted(
+    client: httpx.AsyncClient, wrapper: FakeWrapper
+) -> None:
+    session_id = await _new_session(client)
+    data = build_docx(["Needs SSO login"], table=[["Task", "Hours"], ["Export", "6"]])
+    response = await client.post(
+        _estimate_url(session_id),
+        data={"transcript": TRANSCRIPT},
+        files=[("attachments", ("brief.docx", data, DOCX_MIME))],
+    )
+    assert response.status_code == 200
+    prompt = wrapper.calls[0]["user_message"]
+    assert "--- attachment: brief.docx ---" in prompt
+    assert "Needs SSO login" in prompt
+    assert "Export | 6" in prompt
+
+
+async def test_corrupt_docx_is_422_with_safe_message(client: httpx.AsyncClient) -> None:
+    session_id = await _new_session(client)
+    response = await client.post(
+        _estimate_url(session_id),
+        data={"transcript": TRANSCRIPT},
+        files=[("attachments", ("bad.docx", b"not a zip at all", DOCX_MIME))],
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == sessions_router.ATTACHMENT_INVALID
 
 
 async def test_unsupported_extension_is_415(client: httpx.AsyncClient) -> None:

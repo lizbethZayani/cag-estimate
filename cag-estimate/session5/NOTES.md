@@ -31,6 +31,7 @@ Summary of what was built against `practice5.md`, the deliberate decisions, and 
 - The extractor only recognises technologies in its vocabulary (about 35), excludes ambiguous names such as `Go` and `R`, and `agreed_scope` is a truncated summary.
 - No streaming in sessions: only the structured endpoint exists for them; the streaming mode of the UI remains single-shot.
 - Scanned PDFs (no text layer) are rejected; there is no OCR.
+- Word attachments: only `.docx` is read (paragraphs, then table rows); legacy `.doc` is rejected as unsupported (`415`).
 - The session integration tests use a fake LLM, so they prove the plumbing (memory, attachment text and window reach the model), not the quality of a real model's answers. A manual live run against the real model was done earlier in the session.
 - The Streamlit conversation mode was not exercised in a browser by the automated tests, and the multi-file uploader has no Streamlit `AppTest` coverage (the multipart request is tested at the client level).
 - Three screenshots of the conversation with the metadata panel are in `session5/evidence/`. The optional GIF has not been produced.

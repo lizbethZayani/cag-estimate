@@ -17,6 +17,7 @@ from cag_estimate.services.attachments import (
     extract_attachment_text,
     extract_uploads,
 )
+from tests.docx_helpers import build_docx
 from tests.pdf_helpers import build_pdf
 
 
@@ -74,6 +75,71 @@ def test_corrupt_pdf_gives_safe_message():
         extract_attachment_text("bad.pdf", "application/pdf", b"not a pdf at all")
     assert "could not be read" in str(excinfo.value)
     assert "pypdf" not in str(excinfo.value).lower()
+
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+@pytest.fixture
+def roomy_limits(monkeypatch):
+    """A real .docx is ~36 KB (zip of XML parts), far above the tiny default test limit."""
+    settings = Settings(anthropic_api_key="test", attachment_max_bytes=200_000)
+    monkeypatch.setattr(attachments, "get_settings", lambda: settings)
+
+
+@pytest.mark.usefixtures("roomy_limits")
+def test_docx_paragraphs_are_extracted_skipping_blank_ones():
+    data = build_docx(["First line", "   ", "Second line"])
+    assert extract_attachment_text("brief.docx", DOCX_MIME, data) == "First line\nSecond line"
+
+
+@pytest.mark.usefixtures("roomy_limits")
+def test_docx_table_cells_are_extracted_with_row_separators():
+    data = build_docx(["Intro"], table=[["Task", "Hours"], ["Login", "8"]])
+    text = extract_attachment_text("plan.docx", None, data)
+    assert text == "Intro\nTask | Hours\nLogin | 8"
+
+
+@pytest.mark.usefixtures("roomy_limits")
+def test_docx_without_text_raises_clear_error():
+    with pytest.raises(AttachmentError, match="no extractable text"):
+        extract_attachment_text("empty.docx", DOCX_MIME, build_docx(["  ", ""]))
+
+
+def test_corrupt_docx_gives_safe_message():
+    with pytest.raises(AttachmentError) as excinfo:
+        extract_attachment_text("bad.docx", DOCX_MIME, b"not a zip at all")
+    message = str(excinfo.value).lower()
+    assert "could not be read" in message
+    assert "zip" not in message and "package" not in message
+
+
+def test_legacy_doc_is_unsupported():
+    with pytest.raises(UnsupportedAttachmentError):
+        extract_attachment_text("old.doc", "application/msword", b"\xd0\xcf\x11\xe0")
+
+
+@pytest.mark.usefixtures("roomy_limits")
+def test_docx_mime_is_a_hint_when_extension_is_missing():
+    assert extract_attachment_text("brief", DOCX_MIME, build_docx(["Hint text"])) == "Hint text"
+
+
+@pytest.mark.usefixtures("roomy_limits")
+def test_docx_extension_wins_over_text_content_type():
+    assert extract_attachment_text("a.docx", "text/plain", build_docx(["Typed"])) == "Typed"
+
+
+def test_docx_over_byte_limit_is_too_large():
+    data = build_docx(["x"])
+    with pytest.raises(AttachmentTooLargeError):
+        extract_attachment_text("big.docx", DOCX_MIME, data)
+
+
+@pytest.mark.usefixtures("roomy_limits")
+def test_docx_text_reaches_the_combined_transcript():
+    text = extract_attachment_text("brief.docx", DOCX_MIME, build_docx(["Needs SSO"]))
+    combined = build_combined_transcript("hello", [ExtractedAttachment("brief.docx", text)])
+    assert combined == "hello\n\n--- attachment: brief.docx ---\nNeeds SSO"
 
 
 def test_file_over_byte_limit_is_too_large():

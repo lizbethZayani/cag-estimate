@@ -1,4 +1,4 @@
-"""Text extraction for uploaded attachments (PDF and plain-text formats).
+"""Text extraction for uploaded attachments (PDF, Word .docx and plain-text formats).
 
 Attachments are turned into text inside this service and appended to the
 transcript, so the same guardrails and prompt apply to everything the LLM sees.
@@ -8,12 +8,15 @@ exception text.
 
 import io
 import re
+import zipfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import BinaryIO, Protocol
 
 import structlog
+from docx import Document
+from docx.opc.exceptions import PackageNotFoundError
 from pypdf import PdfReader
 from pypdf.errors import PyPdfError
 
@@ -25,6 +28,8 @@ _TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".json"}
 _PDF_EXTENSION = ".pdf"
 _TEXT_CONTENT_TYPES = {"text/plain", "text/markdown", "text/csv", "application/json"}
 _PDF_CONTENT_TYPE = "application/pdf"
+_DOCX_EXTENSION = ".docx"
+_DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 _DASH_RUNS = re.compile(r"-{3,}")
 _FALLBACK_FILENAME = "attachment"
@@ -84,6 +89,8 @@ def extract_attachment_text(filename: str, content_type: str | None, data: bytes
         raise AttachmentTooLargeError(f"Attachment '{_safe_name(filename)}' is too large.")
     if _is_pdf(filename, content_type):
         return _extract_pdf(filename, data)
+    if _is_docx(filename, content_type):
+        return _extract_docx(filename, data)
     if _is_text(filename, content_type):
         return data.decode("utf-8", errors="replace")
     raise UnsupportedAttachmentError(f"Unsupported attachment type: '{_safe_name(filename)}'.")
@@ -126,6 +133,11 @@ def _is_pdf(filename: str, content_type: str | None) -> bool:
     return extension == _PDF_EXTENSION or (not extension and content_type == _PDF_CONTENT_TYPE)
 
 
+def _is_docx(filename: str, content_type: str | None) -> bool:
+    extension = _extension(filename)
+    return extension == _DOCX_EXTENSION or (not extension and content_type == _DOCX_CONTENT_TYPE)
+
+
 def _is_text(filename: str, content_type: str | None) -> bool:
     extension = _extension(filename)
     return extension in _TEXT_EXTENSIONS or (not extension and content_type in _TEXT_CONTENT_TYPES)
@@ -149,4 +161,31 @@ def _extract_pdf(filename: str, data: bytes) -> str:
         raise AttachmentError(
             f"PDF '{_safe_name(filename)}' has no extractable text (it may be a scanned image)."
         )
+    return text
+
+
+def _extract_docx(filename: str, data: bytes) -> str:
+    """Paragraph text first, then table rows (cells joined by ' | ', one row per line)."""
+    try:
+        document = Document(io.BytesIO(data))
+        lines = [p.text.strip() for p in document.paragraphs]
+        lines += [
+            " | ".join(cell.text.strip() for cell in row.cells)
+            for table in document.tables
+            for row in table.rows
+        ]
+    except (
+        zipfile.BadZipFile,
+        PackageNotFoundError,
+        ValueError,
+        OSError,
+        KeyError,
+        TypeError,
+        AttributeError,
+    ) as exc:
+        log.warning("docx_unreadable", error_type=type(exc).__name__)
+        raise AttachmentError(f"Document '{_safe_name(filename)}' could not be read.") from exc
+    text = "\n".join(line for line in lines if line.strip(" |")).strip()
+    if not text:
+        raise AttachmentError(f"Document '{_safe_name(filename)}' has no extractable text.")
     return text

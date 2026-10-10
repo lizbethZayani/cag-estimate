@@ -101,7 +101,7 @@ def estimate_in_session(
 ) -> SessionEstimationResponse | JSONResponse:
     """Estimate within a session (``multipart/form-data``: transcript + optional files).
 
-    Attachments (PDF, txt, md, csv, json) are converted to text and appended to
+    Attachments (PDF, DOCX, txt, md, csv, json) are converted to text and appended to
     the transcript. Session estimates bypass the caches; the session is
     in-memory only. Errors: unknown session 404, too large 413, unsupported
     type 415, unreadable attachment or bad form 422, rejected input 400

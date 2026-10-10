@@ -25,7 +25,6 @@ MODE_STREAMING = "Streaming (markdown)"
 MODE_STRUCTURED = "Structured (JSON)"
 DEFAULT_HOURLY_RATE = 40
 CONVERSATION_KEY = "conversation_messages"
-ATTACHMENT_TYPES = ["pdf", "txt", "md", "csv", "json"]
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 st.set_page_config(
@@ -393,7 +392,7 @@ def render_conversation_inputs() -> None:
     )
     uploads = st.file_uploader(
         "Attachments (optional)",
-        type=ATTACHMENT_TYPES,
+        type=view_models.ATTACHMENT_TYPES,
         accept_multiple_files=True,
         key=f"uploads_{nonce}",
     )
