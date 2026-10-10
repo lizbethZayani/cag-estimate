@@ -1,0 +1,9 @@
+<div class="max-w-2xl mx-auto py-12 px-4">
+  <h1 class="text-3xl font-bold tracking-tighter mb-6 text-white">Conversation</h1>
+  <div role="alert" data-kind="unavailable" class="mb-6 p-4 rounded-md border bg-red-500/15 border-red-400 text-red-200">
+    <%= ConversationPage::UNAVAILABLE_MESSAGE %>
+  </div>
+  <%= link_to "Try again", root_path, class: "text-brand font-bold hover:text-brand-soft tracking-tight" %>
+  <span class="text-white/40 mx-2" aria-hidden="true">/</span>
+  <%= link_to "Use the single estimate form", new_estimation_path, class: "text-white/70 hover:text-brand-soft tracking-tight" %>
+</div>

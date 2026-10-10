@@ -1,0 +1,31 @@
+<% content_for :title, "Conversation - CAG Estimate" %>
+<% turns = @estimations.to_a %>
+<div class="max-w-6xl mx-auto py-10 px-4">
+  <h1 class="text-3xl font-bold tracking-tighter text-white mb-2"><%= @chat_session.title %></h1>
+  <p class="text-sm text-white/60 mb-8">Describe the project, then refine it message by message. Each answer is a full updated estimate.</p>
+
+  <%= render "chat_sessions/alert" %>
+
+  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8 space-y-8 lg:space-y-0">
+    <div class="min-w-0">
+      <section aria-label="Conversation">
+        <% if turns.empty? %>
+          <div data-empty-state class="p-6 rounded-md border border-dashed border-white/20 text-white/70 mb-8">
+            <p class="font-bold text-white mb-1">Send your first message</p>
+            <p class="text-sm">Paste a meeting transcription or describe the project. You can attach PDF, DOCX, TXT, MD, CSV or JSON files. The estimate appears here and the memory panel fills in as you go.</p>
+          </div>
+        <% else %>
+          <ol class="space-y-8 mb-8">
+            <% turns.each do |estimation| %>
+              <%= render "chat_sessions/turn", estimation: estimation %>
+            <% end %>
+          </ol>
+        <% end %>
+      </section>
+
+      <%= render "chat_sessions/message_form", chat_session: @chat_session, request: @request %>
+    </div>
+
+    <%= render "chat_sessions/metadata_panel", chat_session: @chat_session, max_turns: @max_turns, latest_estimation: turns.last %>
+  </div>
+</div>

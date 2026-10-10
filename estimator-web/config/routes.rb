@@ -3,5 +3,8 @@ Rails.application.routes.draw do
   get "up" => "rails/health#show", as: :rails_health_check
 
   resources :estimations, only: [ :index, :new, :create, :show ]
-  root "estimations#new"
+  resources :chat_sessions, only: [ :new, :show, :destroy ] do
+    resources :messages, only: [ :create ]
+  end
+  root "chat_sessions#new"
 end

@@ -1,0 +1,29 @@
+<%# One conversation turn. Local: estimation (the user's message and the API result). %>
+<% response = estimation.to_response %>
+<% payload  = estimation.response_payload %>
+<li data-turn class="space-y-4">
+  <div data-role="user" class="ml-auto max-w-[85%] p-4 rounded-md bg-brand/15 border border-brand/40">
+    <p class="text-xs uppercase tracking-tight font-bold text-brand-soft mb-1">You</p>
+    <p class="text-white/90 whitespace-pre-line break-words"><%= estimation.transcription %></p>
+    <% if Array(payload["attachments"]).any? %>
+      <ul class="flex flex-wrap gap-2 mt-3" aria-label="Attachments">
+        <% Array(payload["attachments"]).each do |name| %>
+          <li data-attachment class="text-xs font-mono px-2 py-1 rounded bg-ink/60 border border-white/10 text-white/80"><%= name %></li>
+        <% end %>
+      </ul>
+    <% end %>
+  </div>
+
+  <div data-role="assistant" class="p-5 rounded-md bg-ink/30 border border-white/10">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <h3 class="text-xl font-bold tracking-tight text-white"><%= response.result.project_name %></h3>
+      <div class="flex flex-wrap items-center gap-2">
+        <span data-badge="prompt" class="text-xs font-bold tracking-tight uppercase bg-brand text-ink-dark px-2 py-1 rounded">prompt <%= response.prompt_version %></span>
+        <% if payload["resolved_tier"].present? %>
+          <span data-badge="tier" class="text-xs font-bold tracking-tight uppercase bg-white/15 text-white px-2 py-1 rounded"><%= payload["resolved_tier"] %></span>
+        <% end %>
+      </div>
+    </div>
+    <%= render "estimations/result", response: response %>
+  </div>
+</li>

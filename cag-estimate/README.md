@@ -481,7 +481,7 @@ The Step 7 integration tests are in [`tests/test_session_integration.py`](tests/
 
 ## Web UI (Rails)
 
-A Rails 8 web UI lives in [`../estimator-web/`](../estimator-web/README.md). It calls the structured `POST /api/v1/estimate` endpoint (not the streaming one), shows the estimate (summary, task table, totals) and keeps a history of successful estimates in Postgres. The Streamlit chat above, with its streaming markdown mode, is still available.
+A Rails 8 web UI lives in [`../estimator-web/`](../estimator-web/README.md). Its root page is a **conversation** over the session endpoints (`/api/v1/sessions/...`): follow-up messages, file attachments, an audience selector and a memory panel (project, team, technologies, scope, turns), with a "New conversation" button that deletes the session. The original one-shot form (`POST /api/v1/estimate`, not the streaming one) stays at `/estimations/new` as "Single estimate", and successful estimates are kept as History in Postgres. Sessions live in the API process memory, so an API restart ends the conversation and the UI starts a new one. The Streamlit chat above, with its streaming markdown mode, is still available.
 
 ```bash
 # from this directory
