@@ -149,8 +149,12 @@ class LLMWrapper:
         user_message: str,
         model_override: str | None = None,
         max_tokens: int = 4000,
+        use_cache: bool = True,
     ) -> dict[str, Any]:
         """Single blocking LLM call with cache + provider fallback.
+
+        ``use_cache=False`` neither reads nor writes the exact cache, for prompts
+        that carry conversation content that must not be stored.
 
         Returns a dict with ``estimation`` (raw text), ``model``, ``provider``,
         ``finish_reason``, ``usage``, ``cost_breakdown``, ``latency_ms``, and
@@ -158,7 +162,7 @@ class LLMWrapper:
         """
         requested_model = model_override or self.primary_model
         cache_key = self._build_cache_key(system_prompt, user_message, requested_model, max_tokens)
-        cached = self.cache.get(cache_key)
+        cached = self.cache.get(cache_key) if use_cache else None
         if cached:
             return {**cached, "cache_hit": True}
 
@@ -177,7 +181,8 @@ class LLMWrapper:
 
         result = self._normalise_response(response, latency_ms=_elapsed_ms(t0))
         _log_completed(call_logger, result, cache_hit=False)
-        self.cache.set(cache_key, result)
+        if use_cache:
+            self.cache.set(cache_key, result)
         return {**result, "cache_hit": False}
 
     def complete_stream(

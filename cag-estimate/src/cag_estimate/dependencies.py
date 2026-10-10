@@ -13,11 +13,13 @@ from cag_estimate.config import get_settings
 from cag_estimate.prompts import render_system_prompt
 from cag_estimate.services.cache import get_cache
 from cag_estimate.services.estimation import EstimationService
+from cag_estimate.services.llm_summarizer import LlmSummarizer, TextCompleter
 from cag_estimate.services.llm_wrapper import get_llm_wrapper
 from cag_estimate.services.session_compression import (
     AnchorDetector,
     ExtractiveSummarizer,
     HistoryCompactor,
+    Summarizer,
 )
 from cag_estimate.services.session_estimation import SessionEstimationService
 from cag_estimate.services.sessions import SessionStore
@@ -90,14 +92,23 @@ def get_estimation_service() -> EstimationService:
     )
 
 
-def build_history_compactor() -> HistoryCompactor | None:
-    """Compactor with the extractive summarizer, or None when compression is disabled."""
+def build_history_compactor(wrapper: TextCompleter | None = None) -> HistoryCompactor | None:
+    """Compactor, or None when compression is disabled.
+
+    Summaries come from the LLM in ``llm`` mode when a wrapper is given, otherwise
+    from the extractive summarizer.
+    """
     settings = get_settings()
     if not settings.session_compression_enabled:
         return None
+    summarizer: Summarizer = ExtractiveSummarizer(settings.session_summary_max_chars)
+    if settings.session_summary_mode == "llm" and wrapper is not None:
+        summarizer = LlmSummarizer(
+            wrapper, settings.session_summary_max_chars, settings.session_summary_model
+        )
     return HistoryCompactor(
         AnchorDetector(),
-        ExtractiveSummarizer(settings.session_summary_max_chars),
+        summarizer,
         settings.session_max_anchors,
         settings.session_summary_max_chars,
     )
@@ -106,6 +117,7 @@ def build_history_compactor() -> HistoryCompactor | None:
 @lru_cache
 def get_session_estimation_service() -> SessionEstimationService:
     """Process-wide session estimation service (no cache: it bypasses both caches)."""
+    wrapper = get_llm_wrapper()
     return SessionEstimationService(
-        get_llm_wrapper(), build_moderation_client(), build_history_compactor()
+        wrapper, build_moderation_client(), build_history_compactor(wrapper)
     )

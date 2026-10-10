@@ -29,7 +29,7 @@ Summary of what was built against `practice5.md`, the deliberate decisions, and 
 
 - Sessions are not persisted: they are lost on restart and not shared across workers; the store is capped and evicts the least recently used session. Sessions can be deleted (`DELETE /api/v1/sessions/{id}`) and optionally expire after `SESSION_IDLE_TTL_SECONDS` of inactivity (default `0`, disabled); expiry is lazy and per process.
 - The extractor only recognises technologies in its vocabulary (about 35), excludes ambiguous names such as `Go` and `R`, and `agreed_scope` is a truncated summary.
-- History compression: anchors are regex heuristics and the summary is extractive (no LLM summarizer yet; it plugs in behind the `Summarizer` protocol).
+- History compression: anchors are regex heuristics and the summary is written by one short LLM call (`SESSION_SUMMARY_MODE=llm`, optional cheap `SESSION_SUMMARY_MODEL`; uncached, runs inside the session lock) and can lose detail; it falls back to the extractive summary if the call fails.
 - No streaming in sessions: only the structured endpoint exists for them; the streaming mode of the UI remains single-shot.
 - Scanned PDFs (no text layer) are rejected; there is no OCR.
 - Word attachments: only `.docx` is read (paragraphs, then table rows); legacy `.doc` is rejected as unsupported (`415`).

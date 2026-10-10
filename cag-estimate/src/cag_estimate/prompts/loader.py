@@ -5,6 +5,7 @@ prompt version is a string change at the call site (``version="v2"``).
 """
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, get_args
 
@@ -41,11 +42,11 @@ _env = Environment(
 _env.filters["pretty_json"] = _to_pretty_json
 
 
-def _render(role: str, version: str, context: dict[str, Any]) -> str:
+def _render(use_case: str, role: str, version: str, context: dict[str, Any]) -> str:
     try:
-        template = _env.get_template(f"estimation/{version}/{role}.j2")
+        template = _env.get_template(f"{use_case}/{version}/{role}.j2")
     except TemplateNotFound as error:
-        raise ValueError(f"Unknown estimation prompt version: {version!r}") from error
+        raise ValueError(f"Unknown {use_case} prompt version: {version!r}") from error
     return template.render(**context)
 
 
@@ -90,7 +91,10 @@ def render_estimation_prompt(
         "description": request.transcription,
         "hourly_rate": request.hourly_rate,
     }
-    return _render("system", version, context), _render("user", version, context)
+    return (
+        _render("estimation", "system", version, context),
+        _render("estimation", "user", version, context),
+    )
 
 
 def render_system_prompt(
@@ -107,4 +111,30 @@ def render_system_prompt(
     Raises:
         ValueError: If the version or the output format is unknown.
     """
-    return _render("system", version, _context(output_format, metadata))
+    return _render("estimation", "system", version, _context(output_format, metadata))
+
+
+@dataclass(frozen=True)
+class SummaryTurn:
+    """One evicted turn for the summary prompt; ``digest=None`` marks a pinned constraint."""
+
+    user: str
+    digest: str | None
+
+
+def render_summary_prompt(
+    previous_summary: str | None,
+    turns: list[SummaryTurn],
+    max_chars: int,
+    version: str = "v1",
+) -> tuple[str, str]:
+    """Render the ``(system, user)`` prompts that fold evicted turns into a summary.
+
+    Raises:
+        ValueError: If the version is unknown.
+    """
+    context = {"previous_summary": previous_summary, "turns": turns, "max_chars": max_chars}
+    return (
+        _render("conversation_summary", "system", version, context),
+        _render("conversation_summary", "user", version, context),
+    )

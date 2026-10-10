@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings
 
@@ -40,6 +41,10 @@ class Settings(BaseSettings):
     session_max_anchors: int = 5
     # Longest cumulative summary of evicted turns, in characters.
     session_summary_max_chars: int = 2000
+    # "llm" folds evicted turns with one short LLM call (extractive fallback on failure).
+    session_summary_mode: Literal["llm", "extractive"] = "llm"
+    # Model for those calls (use a cheap one); None = the router's primary model.
+    session_summary_model: str | None = None
     # Attachment limits: file count, bytes per file, chars of transcript + attachments.
     attachment_max_files: int = 5
     attachment_max_bytes: int = 5_000_000
