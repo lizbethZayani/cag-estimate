@@ -477,3 +477,41 @@ def test_session_creation_failure_keeps_the_ui_usable(_no_real_session_calls):
     assert not app.exception
     assert any(view_models.GENERIC_ERROR in e.value for e in app.error)
     assert len(app.text_area) == 1
+
+
+# ---------- audience tier ----------
+
+def test_audience_options_start_with_auto_and_map_to_wire_values():
+    assert list(view_models.AUDIENCE_OPTIONS) == ["Auto", "Executive", "PM", "Developer"]
+    assert view_models.audience_tier("Auto") is None
+    assert [view_models.audience_tier(label) for label in list(view_models.AUDIENCE_OPTIONS)[1:]] == [
+        "executive", "pm", "developer",
+    ]
+
+
+def test_tier_caption_shows_tier_and_rule_or_nothing():
+    assert view_models.tier_caption("executive", "executive_cues") == "Audience: executive (executive_cues)"
+    assert view_models.tier_caption(None, None) is None
+
+
+def test_send_session_estimate_sends_tier_only_when_chosen():
+    with patch("estimate_client.requests.post", return_value=_response(200, SESSION_BODY)) as post:
+        estimate_client.send_session_estimate("abc", "t", 40, [], tier="pm")
+        estimate_client.send_session_estimate("abc", "t", 40, [])
+    assert post.call_args_list[0].kwargs["data"]["tier"] == "pm"
+    assert "tier" not in post.call_args_list[1].kwargs["data"]
+
+
+def test_send_session_estimate_reads_the_resolved_tier():
+    body = {**SESSION_BODY, "resolved_tier": "pm", "tier_rule": "pm_cues"}
+    with patch("estimate_client.requests.post", return_value=_response(200, body)):
+        answer = estimate_client.send_session_estimate("abc", "t", 40, [])
+    assert (answer.last_tier, answer.last_tier_rule) == ("pm", "pm_cues")
+
+
+def test_get_session_reads_the_last_tier():
+    body = {"session_id": "s", "project_metadata": META, "turns": 1,
+            "last_tier": "developer", "last_tier_rule": "developer_cues"}
+    with patch("estimate_client.requests.get", return_value=_response(200, body)):
+        snapshot = estimate_client.get_session("s")
+    assert (snapshot.last_tier, snapshot.last_tier_rule) == ("developer", "developer_cues")

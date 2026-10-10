@@ -9,6 +9,10 @@ MIN_HOURLY_RATE, MAX_HOURLY_RATE = 30, 150
 
 ATTACHMENT_TYPES = ["pdf", "docx", "txt", "md", "csv", "json"]
 
+# Audience selector for conversations; "Auto" sends no tier so the API infers it.
+# Values mirror cag_estimate.services.tier_resolver.Tier (the UI cannot import the backend).
+AUDIENCE_OPTIONS = {"Auto": None, "Executive": "executive", "PM": "pm", "Developer": "developer"}
+
 GENERIC_ERROR = "The estimation service is temporarily unavailable. Please try again."
 
 GUARDRAIL_MESSAGES = {
@@ -103,6 +107,16 @@ def metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
         ("Technologies", ", ".join(data.get("mentioned_technologies") or []) or EMPTY_VALUE),
         ("Scope", data.get("agreed_scope") or EMPTY_VALUE),
     ]
+
+
+def audience_tier(label: str) -> str | None:
+    """Wire value of an audience option; None for "Auto"."""
+    return AUDIENCE_OPTIONS[label]
+
+
+def tier_caption(tier: str | None, rule: str | None) -> str | None:
+    """Memory-panel caption with the resolved audience, or None before the first turn."""
+    return f"Audience: {tier} ({rule})" if tier else None
 
 
 def short_session_id(session_id: str | None) -> str:

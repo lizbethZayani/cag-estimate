@@ -38,6 +38,8 @@ class SessionSnapshot:
     error: str | None = None
     expired: bool = False
     max_turns: int | None = None
+    last_tier: str | None = None
+    last_tier_rule: str | None = None
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,8 @@ def get_session(session_id: str) -> SessionSnapshot:
         project_metadata=body.get("project_metadata"),
         turns=body.get("turns", 0),
         max_turns=body.get("max_turns"),
+        last_tier=body.get("last_tier"),
+        last_tier_rule=body.get("last_tier_rule"),
     )
 
 
@@ -140,14 +144,21 @@ def delete_session(session_id: str) -> bool:
 
 
 def send_session_estimate(
-    session_id: str, transcript: str, hourly_rate: int, files: list[UploadFile]
+    session_id: str,
+    transcript: str,
+    hourly_rate: int,
+    files: list[UploadFile],
+    tier: str | None = None,
 ) -> SessionAnswer:
     """Call ``POST /api/v1/sessions/{id}/estimate`` (multipart) and return the answer or error."""
     multipart = [("attachments", (name, content, mime)) for name, content, mime in files]
+    form = {"transcript": transcript, "hourly_rate": hourly_rate}
+    if tier:
+        form["tier"] = tier
     try:
         response = requests.post(
             f"{_sessions_url()}/{session_id}/estimate",
-            data={"transcript": transcript, "hourly_rate": hourly_rate},
+            data=form,
             files=multipart,
             timeout=TIMEOUT_SECONDS,
         )
@@ -162,6 +173,8 @@ def send_session_estimate(
         result=body["result"],
         project_metadata=body.get("project_metadata"),
         turns=body.get("turns", 0),
+        last_tier=body.get("resolved_tier"),
+        last_tier_rule=body.get("tier_rule"),
     )
 
 

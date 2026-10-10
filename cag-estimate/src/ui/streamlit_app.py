@@ -322,6 +322,8 @@ def conversation_defaults() -> dict[str, Any]:
         "project_metadata": None,
         "turns": 0,
         "max_turns": None,
+        "last_tier": None,
+        "last_tier_rule": None,
         "session_error": None,
         "input_nonce": 0,
     }
@@ -335,6 +337,8 @@ def open_session() -> None:
     st.session_state.project_metadata = None
     st.session_state.turns = 0
     st.session_state.max_turns = None
+    st.session_state.last_tier = None
+    st.session_state.last_tier_rule = None
 
 
 def start_new_conversation() -> None:
@@ -362,6 +366,8 @@ def apply_session_answer(answer: estimate_client.SessionAnswer) -> bool:
         return False
     st.session_state.project_metadata = answer.project_metadata
     st.session_state.turns = answer.turns
+    st.session_state.last_tier = answer.last_tier
+    st.session_state.last_tier_rule = answer.last_tier_rule
     store_message(
         "assistant",
         CONVERSATION_KEY,
@@ -373,7 +379,7 @@ def apply_session_answer(answer: estimate_client.SessionAnswer) -> bool:
     return True
 
 
-def send_turn(text: str, hourly_rate: int, uploads: list[Any]) -> None:
+def send_turn(text: str, hourly_rate: int, uploads: list[Any], tier: str | None) -> None:
     files = [(f.name, f.getvalue(), f.type or "application/octet-stream") for f in uploads]
     names = [name for name, _, _ in files]
     store_message(
@@ -381,7 +387,7 @@ def send_turn(text: str, hourly_rate: int, uploads: list[Any]) -> None:
     )
     with st.spinner("Estimating... this can take up to a minute"):
         answer = estimate_client.send_session_estimate(
-            st.session_state.session_id, text, hourly_rate, files
+            st.session_state.session_id, text, hourly_rate, files, tier
         )
     if apply_session_answer(answer):
         st.session_state.input_nonce += 1
@@ -407,6 +413,7 @@ def render_conversation_inputs() -> None:
         view_models.MAX_HOURLY_RATE,
         DEFAULT_HOURLY_RATE,
     )
+    audience = st.selectbox("Audience", list(view_models.AUDIENCE_OPTIONS))
     if not st.button("Send", type="primary"):
         return
     if not text.strip():
@@ -414,7 +421,7 @@ def render_conversation_inputs() -> None:
     elif st.session_state.session_id is None:
         st.error(st.session_state.session_error or view_models.GENERIC_ERROR)
     else:
-        send_turn(text, int(rate), uploads)
+        send_turn(text, int(rate), uploads, view_models.audience_tier(audience))
 
 
 def render_conversation() -> None:
@@ -438,6 +445,8 @@ def refresh_memory() -> None:
         st.session_state.project_metadata = snapshot.project_metadata
         st.session_state.turns = snapshot.turns
         st.session_state.max_turns = snapshot.max_turns
+        st.session_state.last_tier = snapshot.last_tier
+        st.session_state.last_tier_rule = snapshot.last_tier_rule
 
 
 def render_memory_panel() -> None:
@@ -450,6 +459,11 @@ def render_memory_panel() -> None:
             f"Session {view_models.short_session_id(session_id)} · "
             f"{st.session_state.turns}{window} turn(s)"
         )
+        audience = view_models.tier_caption(
+            st.session_state.last_tier, st.session_state.last_tier_rule
+        )
+        if audience:
+            st.caption(audience)
         st.caption(
             "This memory is kept separately from the sliding-window history (the last "
             "turns) that the model also sees."
