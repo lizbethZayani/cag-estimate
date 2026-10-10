@@ -321,6 +321,7 @@ def conversation_defaults() -> dict[str, Any]:
         CONVERSATION_KEY: [],
         "project_metadata": None,
         "turns": 0,
+        "max_turns": None,
         "session_error": None,
         "input_nonce": 0,
     }
@@ -333,9 +334,13 @@ def open_session() -> None:
     st.session_state.session_error = started.error
     st.session_state.project_metadata = None
     st.session_state.turns = 0
+    st.session_state.max_turns = None
 
 
 def start_new_conversation() -> None:
+    old_session_id = st.session_state.get("session_id")
+    if old_session_id:
+        estimate_client.delete_session(old_session_id)  # best effort, never blocks the UI
     apply_state(conversation_defaults(), overwrite=True)
     open_session()
     st.session_state.input_nonce += 1
@@ -432,6 +437,7 @@ def refresh_memory() -> None:
     elif snapshot.error is None:
         st.session_state.project_metadata = snapshot.project_metadata
         st.session_state.turns = snapshot.turns
+        st.session_state.max_turns = snapshot.max_turns
 
 
 def render_memory_panel() -> None:
@@ -439,9 +445,10 @@ def render_memory_panel() -> None:
         for label, value in view_models.metadata_rows(st.session_state.project_metadata):
             st.markdown(f"**{label}:** {value}")
         session_id = st.session_state.session_id
+        window = f" / {max_turns}" if (max_turns := st.session_state.max_turns) else ""
         st.caption(
             f"Session {view_models.short_session_id(session_id)} · "
-            f"{st.session_state.turns} turn(s)"
+            f"{st.session_state.turns}{window} turn(s)"
         )
         st.caption(
             "This memory is kept separately from the sliding-window history (the last "

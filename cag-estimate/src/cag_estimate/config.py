@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     session_max_turns: int = DEFAULT_SESSION_MAX_TURNS
     # Safety cap for the in-memory session store (LRU eviction beyond it).
     session_max_sessions: int = DEFAULT_SESSION_MAX_SESSIONS
+    # Seconds of inactivity after which a session expires; 0 disables expiry.
+    session_idle_ttl_seconds: int = 0
     # Attachment limits: file count, bytes per file, chars of transcript + attachments.
     attachment_max_files: int = 5
     attachment_max_bytes: int = 5_000_000

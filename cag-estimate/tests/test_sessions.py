@@ -3,6 +3,7 @@
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -180,13 +181,120 @@ def test_get_unknown_raises_not_found():
         make_store().get("nope")
 
 
-def test_delete_removes_session_and_unknown_is_noop():
+def test_delete_removes_session_and_reports_whether_it_existed():
     store = make_store()
     session = store.create()
-    store.delete(session.session_id)
-    store.delete(session.session_id)
+    assert store.delete(session.session_id) is True
+    assert store.delete(session.session_id) is False
     with pytest.raises(SessionNotFoundError):
         store.get(session.session_id)
+
+
+# --- Idle expiry -----------------------------------------------------------
+
+
+class FakeClock:
+    """Manually advanced UTC clock so expiry tests never sleep."""
+
+    def __init__(self) -> None:
+        self.current = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def __call__(self) -> datetime:
+        return self.current
+
+    def advance(self, seconds: float) -> None:
+        self.current += timedelta(seconds=seconds)
+
+
+def make_ttl_store(ttl: int, clock: FakeClock, max_sessions: int = 10) -> SessionStore:
+    return SessionStore(
+        render, max_turns=3, max_sessions=max_sessions, idle_ttl_seconds=ttl, clock=clock
+    )
+
+
+def test_get_after_idle_ttl_raises_and_removes_the_session():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock)
+    session = store.create()
+    clock.advance(61)
+    with pytest.raises(SessionNotFoundError):
+        store.get(session.session_id)
+    assert len(store) == 0
+
+
+def test_get_within_ttl_refreshes_the_idle_timer():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock)
+    session = store.create()
+    clock.advance(40)
+    assert store.get(session.session_id) is session
+    clock.advance(40)  # 80s since creation but only 40s since last use
+    assert store.get(session.session_id) is session
+
+
+def test_create_purges_expired_sessions_first():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock)
+    stale = store.create()
+    clock.advance(30)
+    fresh = store.create()
+    clock.advance(40)  # stale idle 70s, fresh idle 40s
+    store.create()
+    assert len(store) == 2
+    with pytest.raises(SessionNotFoundError):
+        store.get(stale.session_id)
+    assert store.get(fresh.session_id) is fresh
+
+
+def test_ttl_zero_disables_expiry():
+    clock = FakeClock()
+    store = make_ttl_store(0, clock)
+    session = store.create()
+    clock.advance(10**7)
+    assert store.get(session.session_id) is session
+
+
+def test_session_in_use_is_never_expired():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock)
+    session = store.create()
+    clock.advance(500)
+    with session.lock:
+        assert store.get(session.session_id) is session
+
+
+def test_delete_of_an_expired_session_reports_false():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock)
+    session = store.create()
+    clock.advance(61)
+    assert store.delete(session.session_id) is False
+
+
+def test_lru_cap_still_applies_with_ttl_enabled():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock, max_sessions=2)
+    first = store.create()
+    store.create()
+    store.create()
+    assert len(store) == 2
+    with pytest.raises(SessionNotFoundError):
+        store.get(first.session_id)
+
+
+def test_idle_ttl_setting_defaults_to_disabled_and_reads_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from cag_estimate.config import Settings
+
+    assert Settings(anthropic_api_key="k", _env_file=None).session_idle_ttl_seconds == 0
+    monkeypatch.setenv("SESSION_IDLE_TTL_SECONDS", "900")
+    assert Settings(anthropic_api_key="k", _env_file=None).session_idle_ttl_seconds == 900
+
+
+def test_history_exposes_its_window_size():
+    history, _ = make_history(max_turns=4)
+    assert history.max_turns == 4
 
 
 def test_cap_evicts_least_recently_used():

@@ -5,10 +5,11 @@ between workers. Session estimates bypass the exact and semantic caches,
 because the answer depends on the conversation, not only on the submitted text.
 """
 
+from datetime import datetime
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import JSONResponse
 
 from cag_estimate.config import get_settings
@@ -49,6 +50,10 @@ class SessionSnapshot(SessionCreated):
 
     project_metadata: ProjectMetadata
     turns: int
+    max_turns: int
+    message_count: int
+    created_at: datetime
+    updated_at: datetime
 
 
 def _get_session(store: SessionStore, session_id: str) -> Session:
@@ -81,13 +86,26 @@ def create_session(store: Store) -> SessionCreated:
 
 @router.get("/sessions/{session_id}", response_model=SessionSnapshot)
 def get_session(session_id: str, store: Store) -> SessionSnapshot:
-    """Return the accumulated project metadata and turn count (404 if unknown)."""
+    """Return project metadata, window usage and timestamps (404 if unknown or expired)."""
     session = _get_session(store, session_id)
+    turns = len(session.history)
     return SessionSnapshot(
         session_id=session.session_id,
         project_metadata=session.metadata.model_copy(deep=True),
-        turns=len(session.history),
+        turns=turns,
+        max_turns=session.history.max_turns,
+        message_count=turns * 2,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
     )
+
+
+@router.delete("/sessions/{session_id}", status_code=204)
+def delete_session(session_id: str, store: Store) -> Response:
+    """Discard a session now instead of waiting for eviction (404 if unknown or expired)."""
+    if not store.delete(session_id):
+        raise HTTPException(status_code=404, detail=SESSION_NOT_FOUND)
+    return Response(status_code=204)
 
 
 @router.post("/sessions/{session_id}/estimate", response_model=SessionEstimationResponse)

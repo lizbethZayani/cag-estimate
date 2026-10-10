@@ -365,7 +365,8 @@ The Streamlit default mode, **Conversation (memory)**, creates a session lazily,
 | Method and path | Purpose |
 |-----------------|---------|
 | `POST /api/v1/sessions` | Create a session. `201` with `{"session_id": "<uuid4>"}` |
-| `GET /api/v1/sessions/{id}` | Snapshot: `session_id`, `project_metadata`, `turns` (`404` if unknown) |
+| `GET /api/v1/sessions/{id}` | Snapshot: `session_id`, `project_metadata`, `turns`, `max_turns` (window size), `message_count` (messages in the window, `turns * 2`), `created_at` and `updated_at` (UTC ISO datetimes). `404` if unknown or expired |
+| `DELETE /api/v1/sessions/{id}` | Discard a session now. `204` with no body; `404` if unknown or expired |
 | `POST /api/v1/sessions/{id}/estimate` | Estimate within the session (`multipart/form-data`) |
 
 Fields of `POST /api/v1/sessions/{id}/estimate`:
@@ -433,12 +434,12 @@ Why not a second LLM call as extractor: it adds a call, cost, latency and a new 
 ### Caching and volatility
 
 - **Session estimates bypass the exact and semantic caches.** The answer depends on the history and the accumulated metadata, not only on the submitted text, so a cache keyed on the text could serve an answer from another context.
-- **Sessions live in process memory.** They are lost on restart, are not shared between workers or processes, and are never persisted. `SESSION_MAX_SESSIONS` (default 1000) caps the store; beyond it the least recently used session is evicted and its id then answers `404`. A later stage would move sessions to Redis or a database, with a TTL and a shared store so any worker can serve any session.
+- **Sessions live in process memory.** They are lost on restart, are not shared between workers or processes, and are never persisted. `SESSION_MAX_SESSIONS` (default 1000) caps the store; beyond it the least recently used session is evicted and its id then answers `404`. `SESSION_IDLE_TTL_SECONDS` (default `0`, disabled) expires a session left idle for that long: its id then answers `404`. Use is what counts, so every request on a session restarts its timer; expiry is lazy (checked when the store is used, no background thread) and a session that is mid-request is never expired. `DELETE /api/v1/sessions/{id}` frees one explicitly, and the Streamlit **New conversation** button calls it for the old session. A later stage would move sessions to Redis or a database with a shared store so any worker can serve any session.
 - Requests on the same session are serialized with a lock, so concurrent turns cannot interleave.
 
 ### Configuration
 
-`SESSION_MAX_TURNS`, `SESSION_MAX_SESSIONS`, `ATTACHMENT_MAX_FILES`, `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_MAX_CHARS_TOTAL`, `TRANSCRIPT_MAX_CHARS` and `LLM_STRUCTURED_MAX_TOKENS` are listed in [Environment Variables](#environment-variables). `docker-compose.yml` passes them to the `api` service with the defaults shown there. The structured token limit matters in conversations: later turns can produce larger estimates, and a limit that is too low truncates the JSON and fails the request.
+`SESSION_MAX_TURNS`, `SESSION_MAX_SESSIONS`, `SESSION_IDLE_TTL_SECONDS`, `ATTACHMENT_MAX_FILES`, `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_MAX_CHARS_TOTAL`, `TRANSCRIPT_MAX_CHARS` and `LLM_STRUCTURED_MAX_TOKENS` are listed in [Environment Variables](#environment-variables). `docker-compose.yml` passes them to the `api` service with the defaults shown there. The structured token limit matters in conversations: later turns can produce larger estimates, and a limit that is too low truncates the JSON and fails the request.
 
 ### Tests
 
@@ -611,6 +612,7 @@ The checks below are now enforced in the code: the schema validators (`schemas/e
 | `LLM_STRUCTURED_MAX_TOKENS` | Output token limit for structured (estimate) calls | `8192` |
 | `SESSION_MAX_TURNS` | User/assistant pairs kept in a session's history window | `6` |
 | `SESSION_MAX_SESSIONS` | Cap on in-memory sessions (oldest-used evicted first) | `1000` |
+| `SESSION_IDLE_TTL_SECONDS` | Seconds of inactivity after which a session expires (`0` = never) | `0` |
 | `ATTACHMENT_MAX_FILES` | Attachments per session estimate | `5` |
 | `ATTACHMENT_MAX_BYTES` | Bytes per attachment | `5000000` |
 | `ATTACHMENT_MAX_CHARS_TOTAL` | Characters of transcript plus attachment text | `80000` |

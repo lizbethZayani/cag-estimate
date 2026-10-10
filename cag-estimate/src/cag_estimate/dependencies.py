@@ -73,6 +73,7 @@ def get_session_store() -> SessionStore:
         system_prompt_provider=render_system_prompt,
         max_turns=settings.session_max_turns,
         max_sessions=settings.session_max_sessions,
+        idle_ttl_seconds=settings.session_idle_ttl_seconds,
     )
 
 

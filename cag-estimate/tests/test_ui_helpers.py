@@ -266,6 +266,31 @@ def test_get_session_connection_error():
     assert snapshot.error == view_models.GENERIC_ERROR and snapshot.expired is False
 
 
+def test_get_session_reads_max_turns():
+    body = {"session_id": "s", "project_metadata": META, "turns": 2, "max_turns": 6}
+    with patch("estimate_client.requests.get", return_value=_response(200, body)):
+        snapshot = estimate_client.get_session("s")
+    assert snapshot.max_turns == 6
+
+
+@pytest.mark.parametrize("status", [204, 404])
+def test_delete_session_succeeds_and_ignores_404(status):
+    with patch("estimate_client.requests.delete", return_value=_response(status)) as delete:
+        deleted = estimate_client.delete_session("s-1")
+    assert deleted is True
+    assert delete.call_args.args[0].endswith("/api/v1/sessions/s-1")
+
+
+def test_delete_session_failure_status_is_reported_without_raising():
+    with patch("estimate_client.requests.delete", return_value=_response(502)):
+        assert estimate_client.delete_session("s-1") is False
+
+
+def test_delete_session_connection_error_is_swallowed():
+    with patch("estimate_client.requests.delete", side_effect=requests.ConnectionError("boom")):
+        assert estimate_client.delete_session("s-1") is False
+
+
 def test_send_session_estimate_success_builds_multipart_payload():
     with patch("estimate_client.requests.post", return_value=_response(200, SESSION_BODY)) as post:
         answer = estimate_client.send_session_estimate("abc", "build it", 55, FILES)
@@ -387,6 +412,37 @@ def test_new_conversation_resets_messages_metadata_and_creates_session(_no_real_
     assert app.session_state["project_metadata"] is None
     assert app.session_state["turns"] == 0
     assert len(app.dataframe) == 0
+
+
+def test_new_conversation_deletes_the_old_session_before_creating_the_new_one(
+    _no_real_session_calls,
+):
+    calls = MagicMock()
+    calls.attach_mock(_no_real_session_calls, "create")
+    with patch("estimate_client.delete_session", return_value=True) as delete:
+        calls.attach_mock(delete, "delete")
+        app = _conversation_app()
+        _new_conversation_button(app).click().run()
+    delete.assert_called_once_with("sess-1234-5678")
+    assert [c[0] for c in calls.mock_calls] == ["create", "delete", "create"]
+    assert not app.exception
+
+
+def test_new_conversation_survives_a_failed_delete():
+    with patch("estimate_client.delete_session", return_value=False):
+        app = _conversation_app()
+        _new_conversation_button(app).click().run()
+    assert not app.exception
+    assert app.session_state["session_id"] == "sess-1234-5678"
+
+
+def test_memory_panel_shows_the_window_size_when_known():
+    snapshot = estimate_client.SessionSnapshot(project_metadata=META, turns=1, max_turns=6)
+    with patch("estimate_client.get_session", return_value=snapshot):
+        app = _conversation_app()
+        next(b for b in app.sidebar.button if b.label == "Refresh memory").click().run()
+    captions = " ".join(c.value for c in app.sidebar.caption)
+    assert "1 / 6 turn(s)" in captions
 
 
 def test_expired_session_creates_a_fresh_one_without_resending(_no_real_session_calls):

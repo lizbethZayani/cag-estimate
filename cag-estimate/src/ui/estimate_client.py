@@ -37,6 +37,7 @@ class SessionSnapshot:
     turns: int = 0
     error: str | None = None
     expired: bool = False
+    max_turns: int | None = None
 
 
 @dataclass(frozen=True)
@@ -122,7 +123,20 @@ def get_session(session_id: str) -> SessionSnapshot:
     body = _json_body(response)
     if response.status_code != 200 or body is None:
         return SessionSnapshot(**_failure(response))
-    return SessionSnapshot(project_metadata=body.get("project_metadata"), turns=body.get("turns", 0))
+    return SessionSnapshot(
+        project_metadata=body.get("project_metadata"),
+        turns=body.get("turns", 0),
+        max_turns=body.get("max_turns"),
+    )
+
+
+def delete_session(session_id: str) -> bool:
+    """Call ``DELETE /api/v1/sessions/{id}``; fail soft (a 404 counts as already gone)."""
+    try:
+        response = requests.delete(f"{_sessions_url()}/{session_id}", timeout=TIMEOUT_SECONDS)
+    except requests.RequestException:
+        return False
+    return response.status_code in (204, 404)
 
 
 def send_session_estimate(

@@ -1,6 +1,7 @@
 """Offline tests for the session endpoints (fake LLM wrapper, real service stack)."""
 
 from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -12,7 +13,7 @@ from cag_estimate.main import app
 from cag_estimate.routers import sessions as sessions_router
 from cag_estimate.services import attachments
 from cag_estimate.services.session_estimation import SessionEstimationService
-from cag_estimate.services.sessions import SessionStore
+from cag_estimate.services.sessions import DEFAULT_MAX_TURNS, SessionStore
 from tests.conftest import build_estimation
 from tests.docx_helpers import build_docx
 from tests.pdf_helpers import build_pdf
@@ -88,6 +89,44 @@ async def test_get_session_returns_empty_snapshot(client: httpx.AsyncClient) -> 
     assert body["session_id"] == session_id
     assert body["turns"] == 0
     assert body["project_metadata"]["project_name"] is None
+
+
+async def test_snapshot_exposes_window_size_message_count_and_timestamps(
+    client: httpx.AsyncClient,
+) -> None:
+    session_id = await _new_session(client)
+    await client.post(_estimate_url(session_id), data={"transcript": TRANSCRIPT})
+    body = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert body["max_turns"] == DEFAULT_MAX_TURNS
+    assert body["message_count"] == 2
+    assert body["turns"] == 1
+    created, updated = (datetime.fromisoformat(body[key]) for key in ("created_at", "updated_at"))
+    assert created.utcoffset() == timedelta(0)
+    assert created <= updated
+
+
+async def test_delete_session_is_204_then_get_is_404(client: httpx.AsyncClient) -> None:
+    session_id = await _new_session(client)
+    response = await client.delete(f"/api/v1/sessions/{session_id}")
+    assert response.status_code == 204
+    assert response.content == b""
+    assert (await client.get(f"/api/v1/sessions/{session_id}")).status_code == 404
+
+
+async def test_delete_unknown_session_is_404(client: httpx.AsyncClient) -> None:
+    response = await client.delete("/api/v1/sessions/nope")
+    assert response.status_code == 404
+    assert response.json()["detail"] == sessions_router.SESSION_NOT_FOUND
+    assert "nope" not in response.text
+
+
+async def test_idle_expired_session_is_404_through_the_api(client: httpx.AsyncClient) -> None:
+    now = [datetime(2026, 1, 1, tzinfo=UTC)]
+    store = SessionStore(idle_ttl_seconds=60, clock=lambda: now[0])
+    app.dependency_overrides[get_session_store] = lambda: store
+    session_id = await _new_session(client)
+    now[0] += timedelta(seconds=61)
+    assert (await client.get(f"/api/v1/sessions/{session_id}")).status_code == 404
 
 
 async def test_unknown_session_is_404_for_get_and_estimate(client: httpx.AsyncClient) -> None:
@@ -294,5 +333,5 @@ async def test_hourly_rate_out_of_bounds_is_422(client: httpx.AsyncClient, rate:
 def test_openapi_lists_session_routes() -> None:
     paths = app.openapi()["paths"]
     assert "post" in paths["/api/v1/sessions"]
-    assert "get" in paths["/api/v1/sessions/{session_id}"]
+    assert {"get", "delete"} <= set(paths["/api/v1/sessions/{session_id}"])
     assert "post" in paths["/api/v1/sessions/{session_id}/estimate"]
