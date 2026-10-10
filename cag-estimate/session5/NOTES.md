@@ -10,7 +10,7 @@ Summary of what was built against `practice5.md`, the deliberate decisions, and 
 | 2. Create sessions | `POST /api/v1/sessions` (201), plus `GET /api/v1/sessions/{id}` for a metadata snapshot. |
 | 3. Attachments | `POST /api/v1/sessions/{id}/estimate`, multipart with `transcript` and `attachments`. Path B, separator `--- attachment: name ---`. |
 | 4. Metadata in the prompt | Optional `<project_metadata>` block in the `v1` system template; empty metadata renders nothing. Heuristic extractor after each successful turn. |
-| 5. Sliding window | `SESSION_MAX_TURNS` (default 6) pairs; `to_messages_list()` regenerates the system prompt from the current metadata. `LLMWrapper.complete_structured(history=...)` passes the window to the model. |
+| 5. Sliding window | `SESSION_MAX_TURNS` (default 6) pairs (evicted pairs feed anchors and an extractive summary, `services/session_compression.py`); `to_messages_list()` regenerates the system prompt from the current metadata. `LLMWrapper.complete_structured(history=...)` passes the window to the model. |
 | 6. Client | Streamlit "Conversation (memory)" mode: lazy session, text area, multi-file uploader, `project_metadata` expander, "New conversation". |
 | 7. Tests | `tests/test_session_integration.py` (three required tests) and `tests/test_sessions_endpoints.py`, all offline. |
 
@@ -29,6 +29,7 @@ Summary of what was built against `practice5.md`, the deliberate decisions, and 
 
 - Sessions are not persisted: they are lost on restart and not shared across workers; the store is capped and evicts the least recently used session. Sessions can be deleted (`DELETE /api/v1/sessions/{id}`) and optionally expire after `SESSION_IDLE_TTL_SECONDS` of inactivity (default `0`, disabled); expiry is lazy and per process.
 - The extractor only recognises technologies in its vocabulary (about 35), excludes ambiguous names such as `Go` and `R`, and `agreed_scope` is a truncated summary.
+- History compression: anchors are regex heuristics and the summary is extractive (no LLM summarizer yet; it plugs in behind the `Summarizer` protocol).
 - No streaming in sessions: only the structured endpoint exists for them; the streaming mode of the UI remains single-shot.
 - Scanned PDFs (no text layer) are rejected; there is no OCR.
 - Word attachments: only `.docx` is read (paragraphs, then table rows); legacy `.doc` is rejected as unsupported (`415`).

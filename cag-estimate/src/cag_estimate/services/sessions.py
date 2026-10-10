@@ -9,6 +9,7 @@ import threading
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
@@ -29,11 +30,35 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+@dataclass(frozen=True)
+class Anchor:
+    """A hard-constraint user message pinned for the whole session (``kind`` + compact text)."""
+
+    kind: str
+    text: str
+
+
+CONTEXT_HEADER = "[Earlier conversation context - the turns below are the live thread]"
+CONTEXT_ACKNOWLEDGEMENT = "Understood."
+
+
+def _render_context(anchors: list[Anchor], summary: str | None) -> str:
+    sections = [CONTEXT_HEADER]
+    if anchors:
+        lines = "\n".join(f"- ({anchor.kind}) {anchor.text}" for anchor in anchors)
+        sections.append(f"Pinned constraints from earlier turns:\n{lines}")
+    if summary:
+        sections.append(f"Summary of earlier turns:\n{summary}")
+    return "\n".join(sections)
+
+
 class ConversationHistory:
-    """Sliding window of user/assistant pairs; the system prompt is never stored.
+    """Sliding window of user/assistant pairs plus the context folded out of it.
 
     The system prompt is regenerated on every ``to_messages_list`` call from the
     current metadata, so it always reflects what is known and is never trimmed.
+    Pairs pushed out of the window are returned by ``add_turn``; a compactor can
+    pin their anchors and summary back through ``update_context``.
     """
 
     def __init__(
@@ -48,6 +73,8 @@ class ConversationHistory:
         self._system_prompt_provider = system_prompt_provider
         self._max_turns = max_turns
         self._turns: list[tuple[str, str]] = []
+        self._anchors: list[Anchor] = []
+        self._summary: str | None = None
 
     @property
     def max_turns(self) -> int:
@@ -57,16 +84,36 @@ class ConversationHistory:
     def turns(self) -> list[tuple[str, str]]:
         return list(self._turns)
 
+    @property
+    def anchors(self) -> list[Anchor]:
+        return list(self._anchors)
+
+    @property
+    def summary(self) -> str | None:
+        return self._summary
+
     def __len__(self) -> int:
         return len(self._turns)
 
-    def add_turn(self, user_content: str, assistant_content: str) -> None:
-        """Append one complete pair and drop the oldest pairs beyond the window."""
+    def add_turn(self, user_content: str, assistant_content: str) -> list[tuple[str, str]]:
+        """Append one complete pair; return the oldest pairs pushed out of the window."""
         self._turns.append((user_content, assistant_content))
+        evicted = self._turns[: -self._max_turns]
         del self._turns[: -self._max_turns]
+        return evicted
+
+    def update_context(self, anchors: list[Anchor], summary: str | None) -> None:
+        """Replace the pinned anchors and the cumulative summary of evicted turns."""
+        self._anchors = list(anchors)
+        self._summary = summary or None
 
     def to_messages_list(self) -> list[dict[str, str]]:
         messages = [{"role": "system", "content": self._system_prompt_provider(self._metadata)}]
+        if self._anchors or self._summary:
+            messages.append(
+                {"role": "user", "content": _render_context(self._anchors, self._summary)}
+            )
+            messages.append({"role": "assistant", "content": CONTEXT_ACKNOWLEDGEMENT})
         for user_content, assistant_content in self._turns:
             messages.append({"role": "user", "content": user_content})
             messages.append({"role": "assistant", "content": assistant_content})

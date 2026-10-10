@@ -14,6 +14,11 @@ from cag_estimate.prompts import render_system_prompt
 from cag_estimate.services.cache import get_cache
 from cag_estimate.services.estimation import EstimationService
 from cag_estimate.services.llm_wrapper import get_llm_wrapper
+from cag_estimate.services.session_compression import (
+    AnchorDetector,
+    ExtractiveSummarizer,
+    HistoryCompactor,
+)
 from cag_estimate.services.session_estimation import SessionEstimationService
 from cag_estimate.services.sessions import SessionStore
 
@@ -85,7 +90,22 @@ def get_estimation_service() -> EstimationService:
     )
 
 
+def build_history_compactor() -> HistoryCompactor | None:
+    """Compactor with the extractive summarizer, or None when compression is disabled."""
+    settings = get_settings()
+    if not settings.session_compression_enabled:
+        return None
+    return HistoryCompactor(
+        AnchorDetector(),
+        ExtractiveSummarizer(settings.session_summary_max_chars),
+        settings.session_max_anchors,
+        settings.session_summary_max_chars,
+    )
+
+
 @lru_cache
 def get_session_estimation_service() -> SessionEstimationService:
     """Process-wide session estimation service (no cache: it bypasses both caches)."""
-    return SessionEstimationService(get_llm_wrapper(), build_moderation_client())
+    return SessionEstimationService(
+        get_llm_wrapper(), build_moderation_client(), build_history_compactor()
+    )

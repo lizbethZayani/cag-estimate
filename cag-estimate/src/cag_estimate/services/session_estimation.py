@@ -17,6 +17,7 @@ from cag_estimate.services.attachments import ExtractedAttachment, build_combine
 from cag_estimate.services.estimation import PROMPT_VERSION
 from cag_estimate.services.llm_wrapper import LLMWrapper
 from cag_estimate.services.metadata_extractor import extract_metadata
+from cag_estimate.services.session_compression import HistoryCompactor
 from cag_estimate.services.sessions import Session
 
 MAX_HISTORY_TRANSCRIPT_CHARS = 4000
@@ -41,9 +42,16 @@ def build_history_user_turn(transcript: str, attachments: list[ExtractedAttachme
 class SessionEstimationService:
     """Produces estimates that remember the conversation they belong to."""
 
-    def __init__(self, wrapper: LLMWrapper, moderation_client: Any | None = None) -> None:
+    def __init__(
+        self,
+        wrapper: LLMWrapper,
+        moderation_client: Any | None = None,
+        compactor: HistoryCompactor | None = None,
+    ) -> None:
         self.wrapper = wrapper
         self.moderation_client = moderation_client
+        # None restores the plain sliding window: evicted pairs are simply dropped.
+        self.compactor = compactor
 
     def estimate(
         self,
@@ -85,8 +93,8 @@ class SessionEstimationService:
         )
         return result
 
-    @staticmethod
     def _remember(
+        self,
         session: Session,
         transcript: str,
         attachments: list[ExtractedAttachment],
@@ -94,6 +102,8 @@ class SessionEstimationService:
         result: ProjectEstimation,
     ) -> None:
         session.metadata.merge(extract_metadata(result, combined))
-        session.history.add_turn(
+        evicted = session.history.add_turn(
             build_history_user_turn(transcript, attachments), result.model_dump_json()
         )
+        if self.compactor is not None:
+            self.compactor.compact(session.history, evicted)

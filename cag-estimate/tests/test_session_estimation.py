@@ -12,6 +12,11 @@ from cag_estimate.prompts import render_system_prompt
 from cag_estimate.schemas.estimation import ProjectEstimation
 from cag_estimate.schemas.session import SessionEstimationResponse
 from cag_estimate.services.attachments import ExtractedAttachment
+from cag_estimate.services.session_compression import (
+    AnchorDetector,
+    ExtractiveSummarizer,
+    HistoryCompactor,
+)
 from cag_estimate.services.session_estimation import (
     MAX_HISTORY_TRANSCRIPT_CHARS,
     SessionEstimationService,
@@ -190,3 +195,58 @@ def test_response_metadata_is_a_snapshot_not_the_live_session_object():
 
     assert response.project_metadata == session.metadata
     assert response.project_metadata is not session.metadata
+
+
+def make_compactor() -> HistoryCompactor:
+    return HistoryCompactor(AnchorDetector(), ExtractiveSummarizer(2000), 5, 2000)
+
+
+def run_nine_turns(service: SessionEstimationService, session: Session) -> None:
+    service.estimate(session, "This project is under NDA, keep it confidential", [], 40)
+    for index in range(1, 9):
+        service.estimate(session, f"middle request number {index}", [], 40)
+
+
+def test_overflow_keeps_the_pinned_nda_and_summarizes_the_middle_turns():
+    wrapper = FakeWrapper()
+    session = make_session(max_turns=6)
+    service = SessionEstimationService(wrapper, compactor=make_compactor())
+
+    run_nine_turns(service, session)
+
+    history = wrapper.calls[-1]["history"]
+    assert history[0]["role"] == "user"
+    assert "(nda) This project is under NDA" in history[0]["content"]
+    assert "middle request number 1" in history[0]["content"]
+    assert [m["role"] for m in history] == ["user", "assistant"] * 7
+    assert len(session.history) == 6
+    assert session.metadata.project_name == "Demo"
+
+
+def test_disabled_compaction_restores_plain_dropping():
+    wrapper = FakeWrapper()
+    session = make_session(max_turns=6)
+
+    run_nine_turns(SessionEstimationService(wrapper), session)
+
+    history = wrapper.calls[-1]["history"]
+    assert len(history) == 12
+    assert "NDA" not in " ".join(m["content"] for m in history if m["role"] == "user")
+    assert session.history.anchors == []
+    assert session.history.summary is None
+
+
+def test_compaction_failure_never_changes_the_successful_turn():
+    class ExplodingSummarizer:
+        def summarize(self, previous_summary, evicted):
+            raise RuntimeError("boom")
+
+    compactor = HistoryCompactor(AnchorDetector(), ExplodingSummarizer(), 5, 2000)
+    session = make_session(max_turns=1)
+    service = SessionEstimationService(FakeWrapper(), compactor=compactor)
+
+    service.estimate(session, "first plain", [], 40)
+    response = service.estimate(session, "second plain", [], 40)
+
+    assert response.turns == 1
+    assert session.history.summary == "- first plain"

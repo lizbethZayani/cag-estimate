@@ -52,6 +52,8 @@ class SessionSnapshot(SessionCreated):
     turns: int
     max_turns: int
     message_count: int
+    anchors_count: int
+    summary_chars: int
     created_at: datetime
     updated_at: datetime
 
@@ -95,6 +97,8 @@ def get_session(session_id: str, store: Store) -> SessionSnapshot:
         turns=turns,
         max_turns=session.history.max_turns,
         message_count=turns * 2,
+        anchors_count=len(session.history.anchors),
+        summary_chars=len(session.history.summary or ""),
         created_at=session.created_at,
         updated_at=session.updated_at,
     )

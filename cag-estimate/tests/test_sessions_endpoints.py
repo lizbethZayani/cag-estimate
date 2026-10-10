@@ -12,6 +12,11 @@ from cag_estimate.dependencies import get_session_estimation_service, get_sessio
 from cag_estimate.main import app
 from cag_estimate.routers import sessions as sessions_router
 from cag_estimate.services import attachments
+from cag_estimate.services.session_compression import (
+    AnchorDetector,
+    ExtractiveSummarizer,
+    HistoryCompactor,
+)
 from cag_estimate.services.session_estimation import SessionEstimationService
 from cag_estimate.services.sessions import DEFAULT_MAX_TURNS, SessionStore
 from tests.conftest import build_estimation
@@ -103,6 +108,32 @@ async def test_snapshot_exposes_window_size_message_count_and_timestamps(
     created, updated = (datetime.fromisoformat(body[key]) for key in ("created_at", "updated_at"))
     assert created.utcoffset() == timedelta(0)
     assert created <= updated
+
+
+async def test_snapshot_reports_zero_anchors_and_summary_on_a_fresh_session(
+    client: httpx.AsyncClient,
+) -> None:
+    session_id = await _new_session(client)
+    body = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert body["anchors_count"] == 0
+    assert body["summary_chars"] == 0
+
+
+async def test_snapshot_reports_anchors_and_summary_after_the_window_overflows(
+    client: httpx.AsyncClient, wrapper: FakeWrapper
+) -> None:
+    store = SessionStore(max_turns=1)
+    compactor = HistoryCompactor(AnchorDetector(), ExtractiveSummarizer(2000), 5, 2000)
+    app.dependency_overrides[get_session_store] = lambda: store
+    app.dependency_overrides[get_session_estimation_service] = lambda: SessionEstimationService(
+        wrapper, compactor=compactor
+    )
+    session_id = await _new_session(client)
+    for text in ("Everything is under NDA", "plain request", "another plain request"):
+        await client.post(_estimate_url(session_id), data={"transcript": text})
+    body = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert body["anchors_count"] == 1
+    assert body["summary_chars"] == len("- plain request")
 
 
 async def test_delete_session_is_204_then_get_is_404(client: httpx.AsyncClient) -> None:
