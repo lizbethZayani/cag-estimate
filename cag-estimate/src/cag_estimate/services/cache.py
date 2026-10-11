@@ -26,12 +26,12 @@ log = structlog.get_logger()
 class EstimationCache:
     """Thin wrapper around redis-py with deterministic keying and TTL."""
 
-    def __init__(self, redis_client: redis.Redis, ttl: int = 86400):
+    def __init__(self, redis_client: redis.Redis, ttl: int = 86400) -> None:
         self.redis = redis_client
         self.ttl = ttl
 
     @classmethod
-    def from_url(cls, url: str, ttl: int = 86400) -> "EstimationCache":
+    def from_url(cls, url: str, ttl: int = 86400) -> EstimationCache:
         return cls(redis.from_url(url, decode_responses=True), ttl=ttl)
 
     @staticmethod
@@ -64,21 +64,32 @@ class EstimationCache:
             # not take down the estimation endpoints.
             log.warning("cache_get_failed", error=str(exc))
             return None
-        if cached:
-            log.info("cache_hit", key_prefix=key[:24])
-            return json.loads(cached)
-        log.info("cache_miss", key_prefix=key[:24])
-        return None
+        if not cached:
+            log.info("cache_miss", key_prefix=key[:24])
+            return None
+        try:
+            value = json.loads(cached)
+        except json.JSONDecodeError as exc:
+            # A corrupt entry is treated as a miss so the LLM is called again.
+            log.warning("cache_get_corrupt", key_prefix=key[:24], error=str(exc))
+            return None
+        log.info("cache_hit", key_prefix=key[:24])
+        return value
 
     def set(self, key: str, response: dict[str, Any]) -> None:
         try:
-            self.redis.setex(key, self.ttl, json.dumps(response))
+            payload = json.dumps(response)
+        except (TypeError, ValueError) as exc:
+            log.warning("cache_set_unserializable", error=str(exc))
+            return
+        try:
+            self.redis.setex(key, self.ttl, payload)
             log.info("cache_stored", key_prefix=key[:24], ttl=self.ttl)
         except redis.RedisError as exc:
             log.warning("cache_set_failed", error=str(exc))
 
 
-@lru_cache()
+@lru_cache
 def get_cache() -> EstimationCache:
     """Process-wide singleton cache, configured from Settings."""
     settings = get_settings()

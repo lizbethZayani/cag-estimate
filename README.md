@@ -58,7 +58,7 @@ shopping carts creation base on the grocery shops around where you live..."
 cag-estimate/
 ├── cag-estimate/                     # Main project folder
 │   ├── README.md                     # ⭐ FULL DOCUMENTATION HERE
-│   ├── VERIFICATION.md               # Verification pipeline guide
+│   ├── VERIFICATION.md               # Verification guide
 │   ├── pyproject.toml                # Project configuration
 │   ├── .env.example                  # Environment template
 │   ├── src/cag_estimate/
@@ -67,9 +67,7 @@ cag-estimate/
 │   │   ├── routers/estimations.py    # API endpoints
 │   │   ├── services/llm_service.py   # LLM integration
 │   │   └── context/examples.py       # Reference examples
-│   └── tests/
-│       ├── test_verification.py      # Verification tests (9/9 passing)
-│       └── verify_api.py             # API integration tests
+│   └── tests/                        # Offline pytest suite
 └── README.md                          # This file
 ```
 
@@ -94,7 +92,7 @@ cag-estimate/
 ## 🔗 Important Links
 
 📖 **[Full Documentation](./cag-estimate/README.md)** - Complete setup, API guide, examples  
-🧪 **[Verification Pipeline](./cag-estimate/VERIFICATION.md)** - Manager's confidence levels guide  
+🧪 **[Verification Pipeline](./cag-estimate/VERIFICATION.md)** - End-to-end checks, evals and validation rules  
 🐍 **[Python Project Config](./cag-estimate/pyproject.toml)** - Dependencies and settings  
 📝 **[Environment Template](./cag-estimate/.env.example)** - Configuration template  
 
@@ -109,25 +107,20 @@ cag-estimate/
 
 ## 💰 Pricing
 
-**Per Estimation Request:** ~$0.00006 (less than a penny!)
-- Input tokens: $3 per 1M
-- Output tokens: $15 per 1M
-- Ultra-affordable for production use
+**Per structured estimation request:** about 1-2 cents with Haiku 4.5
+- Input tokens: $1 per 1M
+- Output tokens: $5 per 1M
+- Conversation turns cost more as the history grows, and reviewed estimates (actor-critic) make extra calls per turn
 
 ## ✅ Testing Status
 
-```
-Verification Pipeline: 9/9 tests ✅ PASSING
-├── Schema Validation ✅
-├── Business Logic ✅
-├── Reasonableness Checks ✅
-├── Content Quality ✅
-├── Consistency Validation ✅
-├── Invalid Schema Detection ✅
-├── Calculation Error Detection ✅
-├── Reasonableness Bounds ✅
-└── Complete Validation ✅
-```
+The automated checks run offline (the LLM is faked). Only the evals call the real LLM.
+
+- Python backend: `cd cag-estimate && PYTHONPATH=src uv run pytest -q`
+- Rails UI (needs Docker): `cd cag-estimate && docker compose exec -T estimator-web bin/rails test`
+- Evals against the running API (list the cases first with `--dry-run`): `cd cag-estimate && PYTHONPATH=src uv run python -m cag_estimate.evals.run --dry-run`
+
+See the [verification guide](./cag-estimate/VERIFICATION.md) for the full list.
 
 ## 📋 Files in Repository
 
@@ -138,7 +131,7 @@ Verification Pipeline: 9/9 tests ✅ PASSING
 ## 🎯 Next Steps
 
 1. **[Read the Full Documentation](./cag-estimate/README.md)** for setup instructions
-2. **[Review Verification Guide](./cag-estimate/VERIFICATION.md)** for manager workflow
+2. **[Review Verification Guide](./cag-estimate/VERIFICATION.md)** for the end-to-end checks
 3. **Navigate to `cag-estimate/`** and follow the Getting Started section
 
 ---

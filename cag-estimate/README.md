@@ -49,7 +49,7 @@ Context-Augmented Generation endpoint that:
 
 #### 7. **Tests**
 - Offline unit tests (no network, no Redis): run with `uv run pytest`; see [Running tests](#running-tests)
-- `tests/verify_api.py` and `tests/test_verification.py` are the older verification scripts; see [VERIFICATION.md](VERIFICATION.md)
+- For end-to-end checks against the running API, the evals and the Rails tests see [VERIFICATION.md](VERIFICATION.md)
 
 ### 🚀 Quick Start
 
@@ -121,7 +121,7 @@ Tasks Included:
 Input Tokens: 3,625
 Output Tokens: 3,275
 Total Tokens: 6,900
-API Cost: $0.000060 (less than a penny!)
+API Cost: $0.0200 (about 2 cents at $1 / $5 per 1M tokens)
 ```
 
 **Verification Result:** ✅ ALL VALIDATIONS PASSED
@@ -146,8 +146,8 @@ API Cost: $0.000060 (less than a penny!)
 ✅ **Validated Output** - Pydantic validators, guardrails and retries on every structured estimate  
 ✅ **Two-level Cache** - Exact (Redis) and semantic (Redis Stack) cache, fail-soft  
 ✅ **Cost Transparent** - See exact token costs for every request  
-✅ **Fast Results** - 3-5 seconds per estimation  
-✅ **Affordable** - ~$0.00006 per request using Haiku 4.5  
+✅ **Reasonable latency** - typically 15-30 seconds per structured estimate (longer for multi-turn or reviewed estimates)  
+✅ **Affordable** - roughly 1-2 cents per structured estimate with Haiku 4.5 (see Token Pricing)  
 ✅ **Production Ready** - CORS enabled, error handling, comprehensive logging  
 ✅ **Well Documented** - README, verification guide, interactive API docs  
 ✅ **Tested** - offline pytest suite (`uv run pytest`)  
@@ -178,7 +178,7 @@ cag-estimate/
 │       ├── streamlit_app.py             # Chat UI (streaming + structured)
 │       ├── estimate_client.py           # HTTP client with safe error messages
 │       └── view_models.py               # Pure presentation helpers
-├── tests/                               # Offline pytest suite (+ legacy verify_api.py)
+├── tests/                               # Offline pytest suite
 ├── session4/NOTES.md                    # Session 4 changes vs the reference repo
 ├── run_streamlit.sh                     # Launches the chat UI
 ├── Dockerfile                           # API container image
@@ -671,7 +671,7 @@ Token usage and cost metrics are no longer part of the structured response; they
 
 ## Verification Pipeline
 
-The checks below are now enforced in the code: the schema validators (`schemas/estimation.py`) and the output guardrail run on every structured request. `tests/test_verification.py` and `tests/verify_api.py` are the older stand-alone scripts and still describe the previous response shape. For an end-to-end check of the current API see [VERIFICATION.md](VERIFICATION.md). The ranges listed here are the original guidance; the enforced values are in [Structured output and validators](#structured-output-and-validators).
+The checks below are now enforced in the code: the schema validators (`schemas/estimation.py`) and the output guardrail run on every structured request. For an end-to-end check of the current API see [VERIFICATION.md](VERIFICATION.md). The ranges listed here are the original guidance; the enforced values are in [Structured output and validators](#structured-output-and-validators).
 
 ### 1. Schema Validation ✓
 - Verify response matches expected JSON structure
@@ -746,9 +746,9 @@ The checks below are now enforced in the code: the schema validators (`schemas/e
 
 ## Token Pricing (Claude Haiku 4.5)
 
-- **Input tokens**: $3 per 1M tokens
-- **Output tokens**: $15 per 1M tokens
-- **Example cost**: ~$0.00005 per estimation request
+- **Input tokens**: $1 per 1M tokens
+- **Output tokens**: $5 per 1M tokens (these are the prices in `MODEL_COSTS` in `services/llm_wrapper.py`)
+- **Example cost**: about 1-2 cents per structured estimate (roughly 3-4k input and 3-4k output tokens). Conversation turns cost more as the history grows, and reviewed estimates (actor-critic) make extra calls per turn.
 
 ## Features
 
@@ -809,9 +809,9 @@ curl https://api.anthropic.com/v1/models \
 
 ## Performance
 
-- **Fast estimation**: ~3-5 seconds per request
-- **Low cost**: ~$0.00005 per estimation (using Haiku 4.5)
-- **Efficient**: Haiku 4.5 model optimized for speed and cost
+- **Latency**: typically 15-30 seconds per structured estimate (measured on the local stack with Haiku 4.5); cache hits answer in well under a second
+- **Cost**: about 1-2 cents per structured estimate (see Token Pricing)
+- **Efficient**: Haiku 4.5 is the cheap, fast default model
 - **Scalable**: Stateless API design supports horizontal scaling
 
 ## License

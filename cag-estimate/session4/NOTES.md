@@ -42,4 +42,4 @@ The Rails 8 UI from the reference repo (`ai-engineering@session_4_live`, `estima
 - The semantic cache was verified only against a faked RediSearch index; real Redis Stack behaviour is checked manually (see `VERIFICATION.md`).
 - The Streamlit UI was tested with Streamlit's `AppTest` and patched HTTP, not against a live backend.
 - The backend is single-shot: the chat history is not sent to the model as context.
-- `tests/verify_api.py` still reads the previous response shape and no longer works against the current API.
+- The legacy `tests/verify_api.py` and `tests/test_verification.py` scripts were removed in the lint cleanup; their rules live in `schemas/estimation.py`.
