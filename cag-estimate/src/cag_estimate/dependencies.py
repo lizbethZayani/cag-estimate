@@ -1,6 +1,6 @@
 """FastAPI dependency factories (overridable via ``app.dependency_overrides``)."""
 
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any
 
 import redis
@@ -12,9 +12,20 @@ from cag_estimate.cache.vectorizer import LazyOpenAIVectorizer
 from cag_estimate.config import get_settings
 from cag_estimate.prompts import render_system_prompt
 from cag_estimate.services.cache import get_cache
+from cag_estimate.services.critic import Critic
 from cag_estimate.services.estimation import EstimationService
+from cag_estimate.services.llm_summarizer import LlmSummarizer, TextCompleter
 from cag_estimate.services.llm_wrapper import get_llm_wrapper
-from cag_estimate.services.session_estimation import SessionEstimationService
+from cag_estimate.services.session_compression import (
+    AnchorDetector,
+    ExtractiveSummarizer,
+    HistoryCompactor,
+    Summarizer,
+)
+from cag_estimate.services.session_estimation import (
+    SESSION_PROMPT_VERSION,
+    SessionEstimationService,
+)
 from cag_estimate.services.sessions import SessionStore
 
 log = structlog.get_logger()
@@ -70,9 +81,10 @@ def get_session_store() -> SessionStore:
     """Process-wide in-memory session store (volatile: lost on restart)."""
     settings = get_settings()
     return SessionStore(
-        system_prompt_provider=render_system_prompt,
+        system_prompt_provider=partial(render_system_prompt, version=SESSION_PROMPT_VERSION),
         max_turns=settings.session_max_turns,
         max_sessions=settings.session_max_sessions,
+        idle_ttl_seconds=settings.session_idle_ttl_seconds,
     )
 
 
@@ -84,7 +96,37 @@ def get_estimation_service() -> EstimationService:
     )
 
 
+def build_history_compactor(wrapper: TextCompleter | None = None) -> HistoryCompactor | None:
+    """Compactor, or None when compression is disabled.
+
+    Summaries come from the LLM in ``llm`` mode when a wrapper is given, otherwise
+    from the extractive summarizer.
+    """
+    settings = get_settings()
+    if not settings.session_compression_enabled:
+        return None
+    summarizer: Summarizer = ExtractiveSummarizer(settings.session_summary_max_chars)
+    if settings.session_summary_mode == "llm" and wrapper is not None:
+        summarizer = LlmSummarizer(
+            wrapper, settings.session_summary_max_chars, settings.session_summary_model
+        )
+    return HistoryCompactor(
+        AnchorDetector(),
+        summarizer,
+        settings.session_max_anchors,
+        settings.session_summary_max_chars,
+    )
+
+
 @lru_cache
 def get_session_estimation_service() -> SessionEstimationService:
     """Process-wide session estimation service (no cache: it bypasses both caches)."""
-    return SessionEstimationService(get_llm_wrapper(), build_moderation_client())
+    wrapper = get_llm_wrapper()
+    settings = get_settings()
+    return SessionEstimationService(
+        wrapper,
+        build_moderation_client(),
+        build_history_compactor(wrapper),
+        Critic(wrapper, settings.critic_model),
+        settings.acb_max_iterations,
+    )

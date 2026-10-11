@@ -67,3 +67,5 @@ class SessionEstimationResponse(EstimationResponse):
     project_metadata: ProjectMetadata
     turns: int
     attachments: list[str] = Field(default_factory=list)
+    resolved_tier: str
+    tier_rule: str

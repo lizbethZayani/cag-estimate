@@ -124,6 +124,44 @@ def test_complete_miss_calls_router_and_caches(cache: EstimationCache) -> None:
     assert wrapper.router.calls[0]["messages"][0] == {"role": "system", "content": "s"}
 
 
+class SpyCache:
+    """Cache double that records every access."""
+
+    def __init__(self) -> None:
+        self.gets: list[str] = []
+        self.sets: list[str] = []
+
+    def get(self, key: str) -> None:
+        self.gets.append(key)
+
+    def set(self, key: str, value: dict[str, Any]) -> None:
+        self.sets.append(key)
+
+
+def test_complete_without_cache_never_reads_or_writes_it() -> None:
+    cache = SpyCache()
+    wrapper = _wrapper(cache)  # type: ignore[arg-type]
+    wrapper.router = FakeRouter([_text_response("a"), _text_response("b")])
+
+    first = wrapper.complete(system_prompt="s", user_message="u", use_cache=False)
+    second = wrapper.complete(system_prompt="s", user_message="u", use_cache=False)
+
+    assert (first["estimation"], second["estimation"]) == ("a", "b")
+    assert first["cache_hit"] is False
+    assert cache.gets == [] and cache.sets == []
+    assert len(wrapper.router.calls) == 2
+
+
+def test_complete_uses_the_cache_by_default() -> None:
+    cache = SpyCache()
+    wrapper = _wrapper(cache)  # type: ignore[arg-type]
+    wrapper.router = FakeRouter([_text_response("a")])
+
+    wrapper.complete(system_prompt="s", user_message="u")
+
+    assert len(cache.gets) == 1 and len(cache.sets) == 1
+
+
 def test_complete_failure_is_reraised(cache: EstimationCache) -> None:
     wrapper = _wrapper(cache)
     wrapper.router = FakeRouter([RuntimeError("boom")])

@@ -1,0 +1,22 @@
+<transcript>
+{{ transcript }}
+</transcript>
+
+<project_metadata>
+- project_name: {{ metadata.project_name or "unknown" }}
+- assumed_team_size: {{ metadata.assumed_team_size or "unknown" }}
+- mentioned_technologies: {{ metadata.mentioned_technologies | join(", ") or "none" }}
+- agreed_scope: {{ metadata.agreed_scope or "not yet agreed" }}
+</project_metadata>
+
+<resolved_tier>{{ tier }}</resolved_tier>
+
+<previous_estimate>
+{{ previous_digest or "none" }}
+</previous_estimate>
+
+<estimate_under_review>
+{{ estimate_digest }}
+</estimate_under_review>
+
+Audit the estimate under review and return the structured review. Be specific in field_path.

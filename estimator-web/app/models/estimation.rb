@@ -1,4 +1,6 @@
 class Estimation < ApplicationRecord
+  belongs_to :chat_session, optional: true
+
   validates :transcription, :hourly_rate, presence: true
 
   def to_response

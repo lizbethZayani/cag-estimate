@@ -5,12 +5,14 @@ prompt version is a string change at the call site (``version="v2"``).
 """
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, get_args
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, TemplateNotFound
 
 from cag_estimate.context.examples import ESTIMATION_EXAMPLES
+from cag_estimate.schemas.acb import CriticFeedback
 from cag_estimate.schemas.estimation import (
     COMPLEXITY_HOURS,
     MAX_HOURLY_RATE,
@@ -41,21 +43,24 @@ _env = Environment(
 _env.filters["pretty_json"] = _to_pretty_json
 
 
-def _render(role: str, version: str, context: dict[str, Any]) -> str:
+def _render(use_case: str, role: str, version: str, context: dict[str, Any]) -> str:
     try:
-        template = _env.get_template(f"estimation/{version}/{role}.j2")
+        template = _env.get_template(f"{use_case}/{version}/{role}.j2")
     except TemplateNotFound as error:
-        raise ValueError(f"Unknown estimation prompt version: {version!r}") from error
+        raise ValueError(f"Unknown {use_case} prompt version: {version!r}") from error
     return template.render(**context)
 
 
-def _context(output_format: str, project_metadata: ProjectMetadata | None) -> dict[str, Any]:
+def _context(
+    output_format: str, project_metadata: ProjectMetadata | None, tier: str | None
+) -> dict[str, Any]:
     """Template variables shared by the system and user prompts."""
     if output_format not in _OUTPUT_FORMATS:
         raise ValueError(f"Unknown output_format: {output_format!r}")
     return {
         "output_format": output_format,
         "project_metadata": project_metadata,
+        "tier": tier,
         "examples": ESTIMATION_EXAMPLES,
         "complexity_hours": COMPLEXITY_HOURS,
         "min_tasks": MIN_TASKS,
@@ -70,6 +75,8 @@ def render_estimation_prompt(
     version: str = "v1",
     output_format: OutputFormat = "json",
     project_metadata: ProjectMetadata | None = None,
+    tier: str | None = None,
+    critic_feedback: CriticFeedback | None = None,
 ) -> tuple[str, str]:
     """Render the ``(system, user)`` prompts for the estimation use case.
 
@@ -81,22 +88,31 @@ def render_estimation_prompt(
         project_metadata: Facts known from earlier turns of a session. ``None``
             or empty metadata renders no ``<project_metadata>`` block at all,
             so non-session output is byte-identical to the pre-session prompt.
+        tier: Audience tier name (a ``Tier`` is a ``str``). Only ``v2`` uses it; ``None``
+            renders the balanced audience, and ``v1`` ignores it.
+        critic_feedback: The latest review of a previous draft. Only ``v2`` uses
+            it, to add a ``<critic_feedback>`` block; ``None`` renders nothing.
 
     Raises:
         ValueError: If the version or the output format is unknown.
     """
     context = {
-        **_context(output_format, project_metadata),
+        **_context(output_format, project_metadata, tier),
         "description": request.transcription,
         "hourly_rate": request.hourly_rate,
+        "critic_feedback": critic_feedback,
     }
-    return _render("system", version, context), _render("user", version, context)
+    return (
+        _render("estimation", "system", version, context),
+        _render("estimation", "user", version, context),
+    )
 
 
 def render_system_prompt(
     metadata: ProjectMetadata,
     version: str = "v1",
     output_format: OutputFormat = "json",
+    tier: str | None = None,
 ) -> str:
     """Render only the system prompt from session metadata (no request needed).
 
@@ -107,4 +123,57 @@ def render_system_prompt(
     Raises:
         ValueError: If the version or the output format is unknown.
     """
-    return _render("system", version, _context(output_format, metadata))
+    return _render("estimation", "system", version, _context(output_format, metadata, tier))
+
+
+@dataclass(frozen=True)
+class SummaryTurn:
+    """One evicted turn for the summary prompt; ``digest=None`` marks a pinned constraint."""
+
+    user: str
+    digest: str | None
+
+
+def render_summary_prompt(
+    previous_summary: str | None,
+    turns: list[SummaryTurn],
+    max_chars: int,
+    version: str = "v1",
+) -> tuple[str, str]:
+    """Render the ``(system, user)`` prompts that fold evicted turns into a summary.
+
+    Raises:
+        ValueError: If the version is unknown.
+    """
+    context = {"previous_summary": previous_summary, "turns": turns, "max_chars": max_chars}
+    return (
+        _render("conversation_summary", "system", version, context),
+        _render("conversation_summary", "user", version, context),
+    )
+
+
+def render_critic_prompt(
+    *,
+    transcript: str,
+    metadata: ProjectMetadata,
+    tier: str,
+    previous_digest: str | None,
+    estimate_digest: str,
+    version: str = "v1",
+) -> tuple[str, str]:
+    """Render the ``(system, user)`` prompts of the independent estimate auditor.
+
+    Raises:
+        ValueError: If the version is unknown.
+    """
+    context = {
+        "transcript": transcript,
+        "metadata": metadata,
+        "tier": tier,
+        "previous_digest": previous_digest,
+        "estimate_digest": estimate_digest,
+    }
+    return (
+        _render("critic", "system", version, context),
+        _render("critic", "user", version, context),
+    )

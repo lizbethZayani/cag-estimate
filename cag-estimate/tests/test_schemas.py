@@ -1,6 +1,9 @@
 """Offline tests for the validated estimation schemas."""
 
+import json
+
 import pytest
+import structlog
 from pydantic import ValidationError
 
 from cag_estimate.schemas.estimation import (
@@ -56,9 +59,55 @@ def test_request_keeps_default_hourly_rate():
     assert EstimationRequest(transcription="hello").hourly_rate == 40
 
 
-def test_sum_of_task_hours_must_match_total():
-    with pytest.raises(ValidationError, match="sum of task hours"):
-        ProjectEstimation(**make_estimation(total_hours=100))
+@pytest.mark.parametrize("claimed", [40, 100])
+def test_total_hours_mismatch_is_corrected_to_the_task_sum(claimed):
+    estimation = ProjectEstimation(**make_estimation(total_hours=claimed))
+    assert estimation.summary.total_hours == 48
+
+
+def test_total_hours_correction_is_logged_without_content():
+    with structlog.testing.capture_logs() as logs:
+        ProjectEstimation(**make_estimation(total_hours=40))
+    assert logs == [
+        {
+            "event": "estimate_total_hours_corrected",
+            "log_level": "warning",
+            "claimed": 40,
+            "computed": 48,
+        }
+    ]
+
+
+def test_matching_total_hours_logs_nothing():
+    with structlog.testing.capture_logs() as logs:
+        ProjectEstimation(**make_estimation())
+    assert logs == []
+
+
+def test_corrected_total_hours_above_range_still_fails():
+    data = make_estimation(task_hours=[64] * 8, total_hours=100)
+    with pytest.raises(ValidationError, match="between 8 and 500"):
+        ProjectEstimation(**data)
+
+
+def test_json_string_summary_is_parsed():
+    data = make_estimation()
+    data["summary"] = json.dumps(data["summary"])
+    assert ProjectEstimation(**data).summary.total_hours == 48
+
+
+def test_invalid_json_string_summary_fails_validation():
+    data = make_estimation()
+    data["summary"] = "{not json"
+    with pytest.raises(ValidationError, match="summary"):
+        ProjectEstimation(**data)
+
+
+def test_json_string_that_is_not_an_object_fails_validation():
+    data = make_estimation()
+    data["summary"] = "[1, 2]"
+    with pytest.raises(ValidationError, match="summary"):
+        ProjectEstimation(**data)
 
 
 @pytest.mark.parametrize("count", [2, 21])

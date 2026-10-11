@@ -1,6 +1,7 @@
 """Offline tests for the session endpoints (fake LLM wrapper, real service stack)."""
 
 from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -11,10 +12,18 @@ from cag_estimate.dependencies import get_session_estimation_service, get_sessio
 from cag_estimate.main import app
 from cag_estimate.routers import sessions as sessions_router
 from cag_estimate.services import attachments
+from cag_estimate.services.session_compression import (
+    AnchorDetector,
+    ExtractiveSummarizer,
+    HistoryCompactor,
+)
 from cag_estimate.services.session_estimation import SessionEstimationService
-from cag_estimate.services.sessions import SessionStore
+from cag_estimate.services.sessions import DEFAULT_MAX_TURNS, SessionStore
 from tests.conftest import build_estimation
+from tests.docx_helpers import build_docx
 from tests.pdf_helpers import build_pdf
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 TRANSCRIPT = "We need a bookstore web shop in Django with Stripe payments."
 
@@ -87,6 +96,70 @@ async def test_get_session_returns_empty_snapshot(client: httpx.AsyncClient) -> 
     assert body["project_metadata"]["project_name"] is None
 
 
+async def test_snapshot_exposes_window_size_message_count_and_timestamps(
+    client: httpx.AsyncClient,
+) -> None:
+    session_id = await _new_session(client)
+    await client.post(_estimate_url(session_id), data={"transcript": TRANSCRIPT})
+    body = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert body["max_turns"] == DEFAULT_MAX_TURNS
+    assert body["message_count"] == 2
+    assert body["turns"] == 1
+    created, updated = (datetime.fromisoformat(body[key]) for key in ("created_at", "updated_at"))
+    assert created.utcoffset() == timedelta(0)
+    assert created <= updated
+
+
+async def test_snapshot_reports_zero_anchors_and_summary_on_a_fresh_session(
+    client: httpx.AsyncClient,
+) -> None:
+    session_id = await _new_session(client)
+    body = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert body["anchors_count"] == 0
+    assert body["summary_chars"] == 0
+
+
+async def test_snapshot_reports_anchors_and_summary_after_the_window_overflows(
+    client: httpx.AsyncClient, wrapper: FakeWrapper
+) -> None:
+    store = SessionStore(max_turns=1)
+    compactor = HistoryCompactor(AnchorDetector(), ExtractiveSummarizer(2000), 5, 2000)
+    app.dependency_overrides[get_session_store] = lambda: store
+    app.dependency_overrides[get_session_estimation_service] = lambda: SessionEstimationService(
+        wrapper, compactor=compactor
+    )
+    session_id = await _new_session(client)
+    for text in ("Everything is under NDA", "plain request", "another plain request"):
+        await client.post(_estimate_url(session_id), data={"transcript": text})
+    body = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert body["anchors_count"] == 1
+    assert body["summary_chars"] == len("- plain request")
+
+
+async def test_delete_session_is_204_then_get_is_404(client: httpx.AsyncClient) -> None:
+    session_id = await _new_session(client)
+    response = await client.delete(f"/api/v1/sessions/{session_id}")
+    assert response.status_code == 204
+    assert response.content == b""
+    assert (await client.get(f"/api/v1/sessions/{session_id}")).status_code == 404
+
+
+async def test_delete_unknown_session_is_404(client: httpx.AsyncClient) -> None:
+    response = await client.delete("/api/v1/sessions/nope")
+    assert response.status_code == 404
+    assert response.json()["detail"] == sessions_router.SESSION_NOT_FOUND
+    assert "nope" not in response.text
+
+
+async def test_idle_expired_session_is_404_through_the_api(client: httpx.AsyncClient) -> None:
+    now = [datetime(2026, 1, 1, tzinfo=UTC)]
+    store = SessionStore(idle_ttl_seconds=60, clock=lambda: now[0])
+    app.dependency_overrides[get_session_store] = lambda: store
+    session_id = await _new_session(client)
+    now[0] += timedelta(seconds=61)
+    assert (await client.get(f"/api/v1/sessions/{session_id}")).status_code == 404
+
+
 async def test_unknown_session_is_404_for_get_and_estimate(client: httpx.AsyncClient) -> None:
     get_response = await client.get("/api/v1/sessions/nope")
     estimate_response = await client.post(_estimate_url("nope"), data={"transcript": TRANSCRIPT})
@@ -154,6 +227,34 @@ async def test_pdf_attachment_text_is_extracted(
     )
     assert response.status_code == 200
     assert "Invoice export required" in wrapper.calls[0]["user_message"]
+
+
+async def test_docx_attachment_text_is_extracted(
+    client: httpx.AsyncClient, wrapper: FakeWrapper
+) -> None:
+    session_id = await _new_session(client)
+    data = build_docx(["Needs SSO login"], table=[["Task", "Hours"], ["Export", "6"]])
+    response = await client.post(
+        _estimate_url(session_id),
+        data={"transcript": TRANSCRIPT},
+        files=[("attachments", ("brief.docx", data, DOCX_MIME))],
+    )
+    assert response.status_code == 200
+    prompt = wrapper.calls[0]["user_message"]
+    assert "--- attachment: brief.docx ---" in prompt
+    assert "Needs SSO login" in prompt
+    assert "Export | 6" in prompt
+
+
+async def test_corrupt_docx_is_422_with_safe_message(client: httpx.AsyncClient) -> None:
+    session_id = await _new_session(client)
+    response = await client.post(
+        _estimate_url(session_id),
+        data={"transcript": TRANSCRIPT},
+        files=[("attachments", ("bad.docx", b"not a zip at all", DOCX_MIME))],
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == sessions_router.ATTACHMENT_INVALID
 
 
 async def test_unsupported_extension_is_415(client: httpx.AsyncClient) -> None:
@@ -240,6 +341,17 @@ async def test_transcript_over_limit_is_422(client: httpx.AsyncClient) -> None:
     assert response.status_code == 422
 
 
+async def test_transcript_limit_comes_from_settings(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _use_limits(monkeypatch, transcript_max_chars=50)
+    session_id = await _new_session(client)
+    too_long = await client.post(_estimate_url(session_id), data={"transcript": "x" * 51})
+    at_limit = await client.post(_estimate_url(session_id), data={"transcript": "x" * 50})
+    assert too_long.status_code == 422
+    assert at_limit.status_code == 200
+
+
 @pytest.mark.parametrize("rate", ["29", "151"])
 async def test_hourly_rate_out_of_bounds_is_422(client: httpx.AsyncClient, rate: str) -> None:
     session_id = await _new_session(client)
@@ -252,5 +364,50 @@ async def test_hourly_rate_out_of_bounds_is_422(client: httpx.AsyncClient, rate:
 def test_openapi_lists_session_routes() -> None:
     paths = app.openapi()["paths"]
     assert "post" in paths["/api/v1/sessions"]
-    assert "get" in paths["/api/v1/sessions/{session_id}"]
+    assert {"get", "delete"} <= set(paths["/api/v1/sessions/{session_id}"])
     assert "post" in paths["/api/v1/sessions/{session_id}/estimate"]
+
+
+async def test_snapshot_tier_fields_are_null_before_the_first_turn(
+    client: httpx.AsyncClient,
+) -> None:
+    session_id = await _new_session(client)
+    body = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert body["last_tier"] is None and body["last_tier_rule"] is None
+
+
+async def test_estimate_resolves_the_tier_and_the_snapshot_reports_it(
+    client: httpx.AsyncClient,
+) -> None:
+    session_id = await _new_session(client)
+    estimate = await client.post(
+        _estimate_url(session_id), data={"transcript": "The CEO wants the ROI."}
+    )
+    snapshot = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert estimate.json()["prompt_version"] == "v2"
+    assert estimate.json()["resolved_tier"] == "executive"
+    assert (snapshot["last_tier"], snapshot["last_tier_rule"]) == ("executive", "executive_cues")
+
+
+async def test_valid_tier_form_field_overrides_the_heuristic(
+    client: httpx.AsyncClient, wrapper: FakeWrapper
+) -> None:
+    session_id = await _new_session(client)
+    response = await client.post(
+        _estimate_url(session_id), data={"transcript": "The CEO wants the ROI.", "tier": "pm"}
+    )
+    snapshot = (await client.get(f"/api/v1/sessions/{session_id}")).json()
+    assert response.status_code == 200
+    assert (snapshot["last_tier"], snapshot["last_tier_rule"]) == ("pm", "override")
+    assert "dependencies" in wrapper.calls[0]["system_prompt"]
+
+
+async def test_invalid_tier_is_422_and_leaves_the_session_untouched(
+    client: httpx.AsyncClient, wrapper: FakeWrapper
+) -> None:
+    session_id = await _new_session(client)
+    response = await client.post(
+        _estimate_url(session_id), data={"transcript": TRANSCRIPT, "tier": "wizard"}
+    )
+    assert response.status_code == 422
+    assert not wrapper.calls

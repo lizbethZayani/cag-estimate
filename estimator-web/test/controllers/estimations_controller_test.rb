@@ -26,7 +26,7 @@ class EstimationsControllerTest < ActionDispatch::IntegrationTest
 
   test "GET new renders labels, upload, stimulus controllers and nav" do
     get new_estimation_path
-    assert_select "header nav a[href='#{new_estimation_path}']", text: "New estimation"
+    assert_select "header nav a[href='#{new_estimation_path}']", text: "Single estimate"
     assert_select "header nav a[href='#{estimations_path}']", text: "History"
     assert_select "form[data-controller~='transcription-upload'][data-controller~='form-loading']"
     assert_select "label", text: "Meeting transcription or project description"
@@ -108,8 +108,8 @@ class EstimationsControllerTest < ActionDispatch::IntegrationTest
     assert_select "[role=alert][data-kind='unavailable']"
   end
 
-  test "root is the new form" do
-    get root_path
+  test "the single-shot form stays reachable at /estimations/new" do
+    get new_estimation_path
     assert_response :success
   end
 

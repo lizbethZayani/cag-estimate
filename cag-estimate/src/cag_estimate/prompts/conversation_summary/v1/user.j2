@@ -1,0 +1,18 @@
+<previous_summary>
+{{ previous_summary or "none" }}
+</previous_summary>
+
+<evicted_turns>
+{% for turn in turns %}
+<turn index="{{ loop.index }}">
+<user>{{ turn.user }}</user>
+{% if turn.digest is none %}
+<note>pinned constraint with no assistant reply</note>
+{% else %}
+<assistant_digest>{{ turn.digest }}</assistant_digest>
+{% endif %}
+</turn>
+{% endfor %}
+</evicted_turns>
+
+Write the updated summary now, in at most {{ max_chars }} characters.

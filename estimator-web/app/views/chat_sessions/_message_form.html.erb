@@ -1,0 +1,75 @@
+<%# Local: chat_session, request (SessionEstimationRequest). %>
+<% field_class = "w-full border border-white/20 rounded-md p-3 text-white bg-ink/40 placeholder:text-white/40 focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand" %>
+<%= form_with model: request, scope: :session_estimation_request,
+      url: chat_session_messages_path(chat_session), method: :post, multipart: true,
+      class: "space-y-5 p-5 rounded-md bg-ink/30 border border-white/10",
+      data: { controller: "form-loading", action: "submit->form-loading#start" } do |f| %>
+
+  <% if request.errors.any? %>
+    <div class="p-4 rounded-md bg-brand/15 border border-brand text-brand-soft">
+      <p class="font-bold mb-1 text-white">Please fix the following:</p>
+      <ul class="list-disc list-inside text-sm">
+        <% request.errors.full_messages.each do |msg| %>
+          <li><%= msg %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div>
+    <%= f.label :transcript, "Message", class: "block text-sm font-bold mb-1 text-white/90" %>
+    <%= f.text_area :transcript, rows: 6, required: true, class: field_class,
+          placeholder: "Describe the project, or answer with changes: new features, a different team size, other technologies..." %>
+  </div>
+
+  <div>
+    <label for="attachments" class="block text-sm font-bold mb-1 text-white/90">Attachments (optional)</label>
+    <input type="file" id="attachments" name="attachments[]" multiple
+           accept=".pdf,.docx,.txt,.md,.csv,.json"
+           class="w-full text-white/90 text-sm file:mr-3 file:px-3 file:py-2 file:rounded-md file:border-0 file:bg-brand file:text-ink-dark file:font-bold file:cursor-pointer file:hover:bg-brand-strong">
+    <p class="text-xs text-white/50 mt-1">PDF, DOCX, TXT, MD, CSV or JSON. Their text is added to your message.</p>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div>
+      <%= f.label :hourly_rate, "Hourly rate (USD)", class: "block text-sm font-bold mb-1 text-white/90" %>
+      <%= f.number_field :hourly_rate, min: EstimationRequest::MIN_HOURLY_RATE, max: EstimationRequest::MAX_HOURLY_RATE, step: 1, required: true, class: field_class %>
+      <p class="text-xs text-white/50 mt-1">Between <%= EstimationRequest::MIN_HOURLY_RATE %> and <%= EstimationRequest::MAX_HOURLY_RATE %>.</p>
+    </div>
+    <div>
+      <%= f.label :tier, "Audience", class: "block text-sm font-bold mb-1 text-white/90" %>
+      <%= f.select :tier, [ [ "Auto", "" ], [ "Executive", "executive" ], [ "PM", "pm" ], [ "Developer", "developer" ] ], {}, class: field_class %>
+      <p class="text-xs text-white/50 mt-1">Auto picks the tone from your message.</p>
+    </div>
+  </div>
+
+  <div>
+    <button type="submit"
+            data-form-loading-target="submit"
+            class="inline-flex items-center px-6 py-3 bg-brand text-ink-dark font-bold tracking-tight rounded-md hover:bg-brand-strong cursor-pointer transition-colors disabled:cursor-not-allowed">
+      <span data-form-loading-target="label">Send</span>
+      <svg data-form-loading-target="spinner"
+           class="hidden ml-2 h-5 w-5 animate-spin"
+           xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+      </svg>
+    </button>
+
+    <div data-form-loading-target="statusPanel"
+         class="hidden mt-4 p-4 rounded-md bg-ink/30 border border-white/10 flex items-center gap-3"
+         role="status" aria-live="polite">
+      <svg class="h-5 w-5 animate-spin text-brand shrink-0"
+           xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+      </svg>
+      <div class="flex-1 text-sm">
+        <span class="text-white/90" data-form-loading-target="phaseText">Sending your message...</span>
+        <span class="ml-2 font-mono text-xs text-white/50" data-form-loading-target="timer">00:00</span>
+      </div>
+    </div>
+  </div>
+<% end %>

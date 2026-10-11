@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings
 
@@ -32,10 +33,29 @@ class Settings(BaseSettings):
     session_max_turns: int = DEFAULT_SESSION_MAX_TURNS
     # Safety cap for the in-memory session store (LRU eviction beyond it).
     session_max_sessions: int = DEFAULT_SESSION_MAX_SESSIONS
+    # Seconds of inactivity after which a session expires; 0 disables expiry.
+    session_idle_ttl_seconds: int = 0
+    # Compress evicted history: pin anchor turns and summarize the rest (False = plain drop).
+    session_compression_enabled: bool = True
+    # Most anchor (hard-constraint) turns pinned per session; older ones fold into the summary.
+    session_max_anchors: int = 5
+    # Longest cumulative summary of evicted turns, in characters.
+    session_summary_max_chars: int = 2000
+    # "llm" folds evicted turns with one short LLM call (extractive fallback on failure).
+    session_summary_mode: Literal["llm", "extractive"] = "llm"
+    # Model for those calls (use a cheap one); None = the router's primary model.
+    session_summary_model: str | None = None
     # Attachment limits: file count, bytes per file, chars of transcript + attachments.
     attachment_max_files: int = 5
     attachment_max_bytes: int = 5_000_000
     attachment_max_chars_total: int = 80_000
+    # Longest transcript accepted by the session estimate endpoint, in characters.
+    transcript_max_chars: int = 80_000
+    # Reviewed estimates: actor drafts, critic audits, boss decides. 2 = one draft plus one
+    # directed retry (worst case 2 actor + 2 critic calls).
+    acb_max_iterations: int = 2
+    # Model for the critic calls (use a cheap one); None = the router's primary model.
+    critic_model: str | None = None
     app_env: str = "development"
     log_level: str = "DEBUG"
 

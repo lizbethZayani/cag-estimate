@@ -3,6 +3,16 @@
 import json
 from typing import Any
 
+# The UI is a separate process and must not import the backend, so the hourly-rate
+# bounds are mirrored here; tests assert they match cag_estimate.schemas.estimation.
+MIN_HOURLY_RATE, MAX_HOURLY_RATE = 30, 150
+
+ATTACHMENT_TYPES = ["pdf", "docx", "txt", "md", "csv", "json"]
+
+# Audience selector for conversations; "Auto" sends no tier so the API infers it.
+# Values mirror cag_estimate.services.tier_resolver.Tier (the UI cannot import the backend).
+AUDIENCE_OPTIONS = {"Auto": None, "Executive": "executive", "PM": "pm", "Developer": "developer"}
+
 GENERIC_ERROR = "The estimation service is temporarily unavailable. Please try again."
 
 GUARDRAIL_MESSAGES = {
@@ -18,10 +28,14 @@ SESSION_EXPIRED_MESSAGE = "The session expired (the API restarted). Starting a n
 SESSION_STATUS_MESSAGES = {
     404: SESSION_EXPIRED_MESSAGE,
     413: "The attachments are too large or too many. Use up to 5 files of 5 MB each.",
-    415: "One of the attachments has an unsupported type. Use pdf, txt, md, csv or json.",
+    415: (
+        "One of the attachments has an unsupported type. "
+        f"Use {', '.join(ATTACHMENT_TYPES[:-1])} or {ATTACHMENT_TYPES[-1]}."
+    ),
     422: "The message or an attachment could not be read. Check them and try again.",
 }
 EMPTY_VALUE = "—"
+CRITIC_FAILED_LABEL = "unavailable (accepted by default)"
 
 
 def guardrail_message(reason: str | None) -> str:
@@ -96,6 +110,16 @@ def metadata_rows(metadata: dict[str, Any] | None) -> list[tuple[str, str]]:
     ]
 
 
+def audience_tier(label: str) -> str | None:
+    """Wire value of an audience option; None for "Auto"."""
+    return AUDIENCE_OPTIONS[label]
+
+
+def tier_caption(tier: str | None, rule: str | None) -> str | None:
+    """Memory-panel caption with the resolved audience, or None before the first turn."""
+    return f"Audience: {tier} ({rule})" if tier else None
+
+
 def short_session_id(session_id: str | None) -> str:
     """First segment of the session UUID, for display."""
     return session_id.split("-")[0] if session_id else EMPTY_VALUE
@@ -111,3 +135,33 @@ def user_turn_text(text: str, file_names: list[str]) -> str:
     if not file_names:
         return text
     return f"{text}\n\n📎 {', '.join(file_names)}"
+
+
+def trace_rows(acb: dict[str, Any]) -> list[dict[str, Any]]:
+    """Table rows for the review trace: one per actor + critic round."""
+    return [
+        {
+            "Round": step["iteration"] + 1,
+            "Verdict": step["critic_verdict"],
+            "Confidence": (
+                EMPTY_VALUE if step["critic_failed"] else f"{step['critic_confidence']}%"
+            ),
+            "Critic": CRITIC_FAILED_LABEL if step["critic_failed"] else "ok",
+            "Issues": "; ".join(step["issue_summary"]) or EMPTY_VALUE,
+            "Next step": step["decision_after"],
+        }
+        for step in acb["iterations"]
+    ]
+
+
+def trace_headline(acb: dict[str, Any]) -> str:
+    """One-line outcome of the review for the trace expander."""
+    rounds = f"{acb['iterations_run']} review round(s)"
+    if acb["final_decision"] == "accept":
+        return f"Accepted after {rounds}."
+    return f"Not fully resolved after {rounds}: open issues are listed below."
+
+
+def caveat_lines(acb: dict[str, Any]) -> list[str]:
+    """Issues the critic left open (empty when the estimate was accepted)."""
+    return list(acb.get("caveats") or [])

@@ -115,6 +115,15 @@ def test_status_error_message_maps_400_reason_and_502():
 
 # ---------- view_models: sessions ----------
 
+def test_ui_rate_bounds_match_the_backend_schema():
+    from cag_estimate.schemas import estimation
+
+    assert (view_models.MIN_HOURLY_RATE, view_models.MAX_HOURLY_RATE) == (
+        estimation.MIN_HOURLY_RATE,
+        estimation.MAX_HOURLY_RATE,
+    )
+
+
 def test_session_status_messages_are_distinct_and_never_raw():
     codes = [404, 413, 415, 422, 502]
     messages = {code: view_models.session_status_error_message(code, {"detail": "secret"})
@@ -123,6 +132,12 @@ def test_session_status_messages_are_distinct_and_never_raw():
     assert all("secret" not in m for m in messages.values())
     assert messages[404] == view_models.SESSION_EXPIRED_MESSAGE
     assert "expired" in messages[404]
+
+
+def test_docx_is_an_accepted_attachment_type_and_named_in_the_415_message():
+    assert "docx" in view_models.ATTACHMENT_TYPES
+    message = view_models.session_status_error_message(415, None)
+    assert all(kind in message for kind in view_models.ATTACHMENT_TYPES)
 
 
 def test_session_status_message_400_uses_guardrail_reason():
@@ -251,6 +266,31 @@ def test_get_session_connection_error():
     assert snapshot.error == view_models.GENERIC_ERROR and snapshot.expired is False
 
 
+def test_get_session_reads_max_turns():
+    body = {"session_id": "s", "project_metadata": META, "turns": 2, "max_turns": 6}
+    with patch("estimate_client.requests.get", return_value=_response(200, body)):
+        snapshot = estimate_client.get_session("s")
+    assert snapshot.max_turns == 6
+
+
+@pytest.mark.parametrize("status", [204, 404])
+def test_delete_session_succeeds_and_ignores_404(status):
+    with patch("estimate_client.requests.delete", return_value=_response(status)) as delete:
+        deleted = estimate_client.delete_session("s-1")
+    assert deleted is True
+    assert delete.call_args.args[0].endswith("/api/v1/sessions/s-1")
+
+
+def test_delete_session_failure_status_is_reported_without_raising():
+    with patch("estimate_client.requests.delete", return_value=_response(502)):
+        assert estimate_client.delete_session("s-1") is False
+
+
+def test_delete_session_connection_error_is_swallowed():
+    with patch("estimate_client.requests.delete", side_effect=requests.ConnectionError("boom")):
+        assert estimate_client.delete_session("s-1") is False
+
+
 def test_send_session_estimate_success_builds_multipart_payload():
     with patch("estimate_client.requests.post", return_value=_response(200, SESSION_BODY)) as post:
         answer = estimate_client.send_session_estimate("abc", "build it", 55, FILES)
@@ -374,6 +414,37 @@ def test_new_conversation_resets_messages_metadata_and_creates_session(_no_real_
     assert len(app.dataframe) == 0
 
 
+def test_new_conversation_deletes_the_old_session_before_creating_the_new_one(
+    _no_real_session_calls,
+):
+    calls = MagicMock()
+    calls.attach_mock(_no_real_session_calls, "create")
+    with patch("estimate_client.delete_session", return_value=True) as delete:
+        calls.attach_mock(delete, "delete")
+        app = _conversation_app()
+        _new_conversation_button(app).click().run()
+    delete.assert_called_once_with("sess-1234-5678")
+    assert [c[0] for c in calls.mock_calls] == ["create", "delete", "create"]
+    assert not app.exception
+
+
+def test_new_conversation_survives_a_failed_delete():
+    with patch("estimate_client.delete_session", return_value=False):
+        app = _conversation_app()
+        _new_conversation_button(app).click().run()
+    assert not app.exception
+    assert app.session_state["session_id"] == "sess-1234-5678"
+
+
+def test_memory_panel_shows_the_window_size_when_known():
+    snapshot = estimate_client.SessionSnapshot(project_metadata=META, turns=1, max_turns=6)
+    with patch("estimate_client.get_session", return_value=snapshot):
+        app = _conversation_app()
+        next(b for b in app.sidebar.button if b.label == "Refresh memory").click().run()
+    captions = " ".join(c.value for c in app.sidebar.caption)
+    assert "1 / 6 turn(s)" in captions
+
+
 def test_expired_session_creates_a_fresh_one_without_resending(_no_real_session_calls):
     expired = _session_answer(
         result=None, project_metadata=None, turns=0, expired=True,
@@ -406,3 +477,133 @@ def test_session_creation_failure_keeps_the_ui_usable(_no_real_session_calls):
     assert not app.exception
     assert any(view_models.GENERIC_ERROR in e.value for e in app.error)
     assert len(app.text_area) == 1
+
+
+# ---------- audience tier ----------
+
+def test_audience_options_start_with_auto_and_map_to_wire_values():
+    assert list(view_models.AUDIENCE_OPTIONS) == ["Auto", "Executive", "PM", "Developer"]
+    assert view_models.audience_tier("Auto") is None
+    assert [view_models.audience_tier(label) for label in list(view_models.AUDIENCE_OPTIONS)[1:]] == [
+        "executive", "pm", "developer",
+    ]
+
+
+def test_tier_caption_shows_tier_and_rule_or_nothing():
+    assert view_models.tier_caption("executive", "executive_cues") == "Audience: executive (executive_cues)"
+    assert view_models.tier_caption(None, None) is None
+
+
+def test_send_session_estimate_sends_tier_only_when_chosen():
+    with patch("estimate_client.requests.post", return_value=_response(200, SESSION_BODY)) as post:
+        estimate_client.send_session_estimate("abc", "t", 40, [], tier="pm")
+        estimate_client.send_session_estimate("abc", "t", 40, [])
+    assert post.call_args_list[0].kwargs["data"]["tier"] == "pm"
+    assert "tier" not in post.call_args_list[1].kwargs["data"]
+
+
+def test_send_session_estimate_reads_the_resolved_tier():
+    body = {**SESSION_BODY, "resolved_tier": "pm", "tier_rule": "pm_cues"}
+    with patch("estimate_client.requests.post", return_value=_response(200, body)):
+        answer = estimate_client.send_session_estimate("abc", "t", 40, [])
+    assert (answer.last_tier, answer.last_tier_rule) == ("pm", "pm_cues")
+
+
+def test_get_session_reads_the_last_tier():
+    body = {"session_id": "s", "project_metadata": META, "turns": 1,
+            "last_tier": "developer", "last_tier_rule": "developer_cues"}
+    with patch("estimate_client.requests.get", return_value=_response(200, body)):
+        snapshot = estimate_client.get_session("s")
+    assert (snapshot.last_tier, snapshot.last_tier_rule) == ("developer", "developer_cues")
+
+
+# ---------- reviewed estimates (actor-critic) ----------
+
+ACB_ACCEPTED = {
+    "iterations": [
+        {"iteration": 0, "decision_after": "iterate", "critic_verdict": "needs_iteration",
+         "critic_confidence": 70, "critic_failed": False,
+         "issue_summary": ["[major] math_error @ summary.total_hours"]},
+        {"iteration": 1, "decision_after": "accept", "critic_verdict": "accept",
+         "critic_confidence": 90, "critic_failed": False, "issue_summary": []},
+    ],
+    "final_decision": "accept", "iterations_run": 2, "caveats": [],
+}
+ACB_OPEN = {
+    "iterations": [
+        {"iteration": 0, "decision_after": "synthesize", "critic_verdict": "reject",
+         "critic_confidence": 0, "critic_failed": True, "issue_summary": []},
+    ],
+    "final_decision": "synthesize", "iterations_run": 1,
+    "caveats": ["[major] scope_mismatch (tasks[1]): not in the transcript"],
+}
+
+
+def test_trace_rows_describe_each_review_round():
+    rows = view_models.trace_rows(ACB_ACCEPTED)
+    assert [row["Round"] for row in rows] == [1, 2]
+    assert rows[0]["Verdict"] == "needs_iteration" and rows[0]["Confidence"] == "70%"
+    assert rows[0]["Issues"] == "[major] math_error @ summary.total_hours"
+    assert rows[1]["Issues"] == view_models.EMPTY_VALUE and rows[1]["Next step"] == "accept"
+
+
+def test_trace_rows_flag_a_failed_critic_instead_of_showing_confidence():
+    row = view_models.trace_rows(ACB_OPEN)[0]
+    assert row["Critic"] == view_models.CRITIC_FAILED_LABEL
+    assert row["Confidence"] == view_models.EMPTY_VALUE
+
+
+def test_trace_headline_and_caveats():
+    assert "accepted" in view_models.trace_headline(ACB_ACCEPTED).lower()
+    assert "2 review round" in view_models.trace_headline(ACB_ACCEPTED)
+    assert "open issues" in view_models.trace_headline(ACB_OPEN).lower()
+    assert view_models.caveat_lines(ACB_ACCEPTED) == []
+    assert view_models.caveat_lines(ACB_OPEN) == ACB_OPEN["caveats"]
+
+
+@pytest.mark.parametrize(
+    ("reviewed", "suffix"), [(True, "/sessions/abc/estimate-acb"), (False, "/sessions/abc/estimate")]
+)
+def test_reviewed_flag_selects_the_endpoint(reviewed, suffix):
+    with patch("estimate_client.requests.post", return_value=_response(200, SESSION_BODY)) as post:
+        estimate_client.send_session_estimate("abc", "t", 40, [], reviewed=reviewed)
+    assert post.call_args.args[0].endswith(suffix)
+
+
+def test_send_session_estimate_reads_the_acb_trace_when_present():
+    with patch("estimate_client.requests.post",
+               return_value=_response(200, {**SESSION_BODY, "acb": ACB_OPEN})):
+        reviewed = estimate_client.send_session_estimate("abc", "t", 40, [], reviewed=True)
+    with patch("estimate_client.requests.post", return_value=_response(200, SESSION_BODY)):
+        plain = estimate_client.send_session_estimate("abc", "t", 40, [])
+    assert reviewed.acb == ACB_OPEN and plain.acb is None
+
+
+def _review_checkbox(app):
+    return next(c for c in app.checkbox if c.label == "Independent review (actor-critic)")
+
+
+def test_review_checkbox_is_off_by_default_and_sends_the_plain_flow(_no_real_session_calls):
+    with patch("estimate_client.send_session_estimate", return_value=_session_answer()) as send:
+        app = _conversation_app()
+        assert _review_checkbox(app).value is False
+        app.text_area[0].set_value("Bookstore").run()
+        _send_button(app).click().run()
+    assert send.call_args.kwargs["reviewed"] is False
+    assert not any("Review trace" in e.label for e in app.expander)
+
+
+def test_reviewed_turn_shows_the_trace_and_caveats_and_survives_reruns(_no_real_session_calls):
+    answer = _session_answer(acb=ACB_OPEN)
+    with patch("estimate_client.send_session_estimate", return_value=answer) as send:
+        app = _conversation_app()
+        _review_checkbox(app).check().run()
+        app.text_area[0].set_value("Bookstore").run()
+        _send_button(app).click().run()
+    assert send.call_args.kwargs["reviewed"] is True
+    assert any("Review trace" in e.label for e in app.expander)
+    assert any("scope_mismatch" in w.value for w in app.warning)
+    stored = app.session_state["conversation_messages"][-1]
+    assert stored["acb"] == ACB_OPEN
+    app.run()
+    assert any("Review trace" in e.label for e in app.expander)

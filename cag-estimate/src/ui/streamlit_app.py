@@ -24,9 +24,7 @@ MODE_CONVERSATION = "Conversation (memory)"
 MODE_STREAMING = "Streaming (markdown)"
 MODE_STRUCTURED = "Structured (JSON)"
 DEFAULT_HOURLY_RATE = 40
-MIN_HOURLY_RATE, MAX_HOURLY_RATE = 30, 150
 CONVERSATION_KEY = "conversation_messages"
-ATTACHMENT_TYPES = ["pdf", "txt", "md", "csv", "json"]
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 st.set_page_config(
@@ -163,11 +161,23 @@ def render_structured(result: dict[str, Any], cached: bool, caption: str | None 
             st.caption(caption)
 
 
+def render_review_trace(acb: dict[str, Any]) -> None:
+    """Expander with the critic rounds, the final decision and any open caveats."""
+    with st.expander("Review trace", expanded=False):
+        st.write(view_models.trace_headline(acb))
+        st.dataframe(view_models.trace_rows(acb), hide_index=True)
+        caveats = view_models.caveat_lines(acb)
+        if caveats:
+            st.warning("**Open issues**\n" + "\n".join(f"- {caveat}" for caveat in caveats))
+
+
 def render_message(message: dict[str, Any]) -> None:
     """Render one stored message according to its kind."""
     kind = message.get("kind", "text")
     if kind == "structured":
         render_structured(message["result"], message["cached"], message.get("caption"))
+        if message.get("acb"):
+            render_review_trace(message["acb"])
     elif kind == "error":
         st.error(message["content"])
     else:
@@ -323,6 +333,9 @@ def conversation_defaults() -> dict[str, Any]:
         CONVERSATION_KEY: [],
         "project_metadata": None,
         "turns": 0,
+        "max_turns": None,
+        "last_tier": None,
+        "last_tier_rule": None,
         "session_error": None,
         "input_nonce": 0,
     }
@@ -335,9 +348,15 @@ def open_session() -> None:
     st.session_state.session_error = started.error
     st.session_state.project_metadata = None
     st.session_state.turns = 0
+    st.session_state.max_turns = None
+    st.session_state.last_tier = None
+    st.session_state.last_tier_rule = None
 
 
 def start_new_conversation() -> None:
+    old_session_id = st.session_state.get("session_id")
+    if old_session_id:
+        estimate_client.delete_session(old_session_id)  # best effort, never blocks the UI
     apply_state(conversation_defaults(), overwrite=True)
     open_session()
     st.session_state.input_nonce += 1
@@ -359,6 +378,8 @@ def apply_session_answer(answer: estimate_client.SessionAnswer) -> bool:
         return False
     st.session_state.project_metadata = answer.project_metadata
     st.session_state.turns = answer.turns
+    st.session_state.last_tier = answer.last_tier
+    st.session_state.last_tier_rule = answer.last_tier_rule
     store_message(
         "assistant",
         CONVERSATION_KEY,
@@ -366,11 +387,14 @@ def apply_session_answer(answer: estimate_client.SessionAnswer) -> bool:
         result=answer.result,
         cached=False,
         caption=view_models.turn_caption(answer.turns),
+        acb=answer.acb,
     )
     return True
 
 
-def send_turn(text: str, hourly_rate: int, uploads: list[Any]) -> None:
+def send_turn(
+    text: str, hourly_rate: int, uploads: list[Any], tier: str | None, reviewed: bool
+) -> None:
     files = [(f.name, f.getvalue(), f.type or "application/octet-stream") for f in uploads]
     names = [name for name, _, _ in files]
     store_message(
@@ -378,7 +402,7 @@ def send_turn(text: str, hourly_rate: int, uploads: list[Any]) -> None:
     )
     with st.spinner("Estimating... this can take up to a minute"):
         answer = estimate_client.send_session_estimate(
-            st.session_state.session_id, text, hourly_rate, files
+            st.session_state.session_id, text, hourly_rate, files, tier, reviewed=reviewed
         )
     if apply_session_answer(answer):
         st.session_state.input_nonce += 1
@@ -394,12 +418,21 @@ def render_conversation_inputs() -> None:
     )
     uploads = st.file_uploader(
         "Attachments (optional)",
-        type=ATTACHMENT_TYPES,
+        type=view_models.ATTACHMENT_TYPES,
         accept_multiple_files=True,
         key=f"uploads_{nonce}",
     )
     rate = st.number_input(
-        "Hourly rate (USD)", MIN_HOURLY_RATE, MAX_HOURLY_RATE, DEFAULT_HOURLY_RATE
+        "Hourly rate (USD)",
+        view_models.MIN_HOURLY_RATE,
+        view_models.MAX_HOURLY_RATE,
+        DEFAULT_HOURLY_RATE,
+    )
+    audience = st.selectbox("Audience", list(view_models.AUDIENCE_OPTIONS))
+    reviewed = st.checkbox(
+        "Independent review (actor-critic)",
+        help="A second model reviews the estimate and may request one rewrite. "
+        "Slower and costs more LLM calls.",
     )
     if not st.button("Send", type="primary"):
         return
@@ -408,7 +441,7 @@ def render_conversation_inputs() -> None:
     elif st.session_state.session_id is None:
         st.error(st.session_state.session_error or view_models.GENERIC_ERROR)
     else:
-        send_turn(text, int(rate), uploads)
+        send_turn(text, int(rate), uploads, view_models.audience_tier(audience), reviewed)
 
 
 def render_conversation() -> None:
@@ -431,6 +464,9 @@ def refresh_memory() -> None:
     elif snapshot.error is None:
         st.session_state.project_metadata = snapshot.project_metadata
         st.session_state.turns = snapshot.turns
+        st.session_state.max_turns = snapshot.max_turns
+        st.session_state.last_tier = snapshot.last_tier
+        st.session_state.last_tier_rule = snapshot.last_tier_rule
 
 
 def render_memory_panel() -> None:
@@ -438,10 +474,16 @@ def render_memory_panel() -> None:
         for label, value in view_models.metadata_rows(st.session_state.project_metadata):
             st.markdown(f"**{label}:** {value}")
         session_id = st.session_state.session_id
+        window = f" / {max_turns}" if (max_turns := st.session_state.max_turns) else ""
         st.caption(
             f"Session {view_models.short_session_id(session_id)} · "
-            f"{st.session_state.turns} turn(s)"
+            f"{st.session_state.turns}{window} turn(s)"
         )
+        audience = view_models.tier_caption(
+            st.session_state.last_tier, st.session_state.last_tier_rule
+        )
+        if audience:
+            st.caption(audience)
         st.caption(
             "This memory is kept separately from the sliding-window history (the last "
             "turns) that the model also sees."

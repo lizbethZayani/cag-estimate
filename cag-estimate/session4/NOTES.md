@@ -23,7 +23,7 @@ What was added to close the Session 4 gap against the reference repo (`ai-engine
 - **Input guardrail before the cache:** a rejected input is never served from either cache and never reaches the LLM.
 - **Prompt-independent cache keys:** keys use transcription, hourly rate, prompt version and model, not the rendered prompt, so wording edits within a version keep entries; a new prompt version is a new key and a new semantic bucket.
 - **Streaming stays Markdown:** the stream endpoint has the input guardrail but no structured validation, no output guardrail and no cache, to keep the token-by-token UI. A rejected input there is one SSE `error` event on HTTP 200 (with `reason`) rather than a 400, because the UI calls `raise_for_status()`.
-- **Hours validation:** exact sum equality between task hours and `total_hours` (the old test-only validator allowed 15%); the complexity ranges are Simple 4-24, Medium 10-64, High 16-112.
+- **Hours validation:** `total_hours` is derived from the task hours and corrected (logged) when the model's sum is off, instead of rejected (the old test-only validator allowed 15%); the complexity ranges are Simple 4-24, Medium 10-64, High 16-112.
 - **`.env.example` not updated:** `EMBEDDING_MODEL` and `SEMANTIC_CACHE_*` are documented in the README and `DOCKER.md` instead; `docker-compose.yml` passes them through to the `api` container.
 
 ## Rails UI port (`estimator-web/`)

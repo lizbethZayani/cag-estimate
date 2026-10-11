@@ -3,11 +3,13 @@
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from cag_estimate.services.sessions import (
     DEFAULT_MAX_TURNS,
+    Anchor,
     ConversationHistory,
     ProjectMetadata,
     Session,
@@ -139,6 +141,63 @@ def test_max_turns_must_be_positive():
         ConversationHistory(ProjectMetadata(), render, max_turns=0)
 
 
+def test_add_turn_returns_the_evicted_pairs():
+    history, _ = make_history(max_turns=2)
+    assert history.add_turn("u0", "a0") == []
+    assert history.add_turn("u1", "a1") == []
+    assert history.add_turn("u2", "a2") == [("u0", "a0")]
+    assert history.turns == [("u1", "a1"), ("u2", "a2")]
+
+
+def test_output_is_plain_when_there_are_no_anchors_or_summary():
+    history, _ = make_history(max_turns=2)
+    history.add_turn("u0", "a0")
+    assert history.anchors == []
+    assert history.summary is None
+    assert history.to_messages_list() == [
+        {"role": "system", "content": "SYSTEM project=None"},
+        {"role": "user", "content": "u0"},
+        {"role": "assistant", "content": "a0"},
+    ]
+
+
+def test_envelope_carries_pinned_constraints_and_summary_and_keeps_roles_alternating():
+    history, _ = make_history(max_turns=2)
+    history.add_turn("u0", "a0")
+    history.update_context([Anchor("nda", "Under NDA")], "- early bullet")
+
+    messages = history.to_messages_list()
+
+    assert [m["role"] for m in messages] == ["system", "user", "assistant", "user", "assistant"]
+    assert messages[1]["content"] == (
+        "[Earlier conversation context - the turns below are the live thread]\n"
+        "Pinned constraints from earlier turns:\n"
+        "- (nda) Under NDA\n"
+        "Summary of earlier turns:\n"
+        "- early bullet"
+    )
+    assert messages[2] == {"role": "assistant", "content": "Understood."}
+    assert messages[3] == {"role": "user", "content": "u0"}
+
+
+def test_envelope_omits_empty_sections():
+    history, _ = make_history()
+    history.update_context([], "- only summary")
+    assert "Pinned constraints" not in history.to_messages_list()[1]["content"]
+
+    history.update_context([Anchor("nda", "Under NDA")], None)
+    content = history.to_messages_list()[1]["content"]
+    assert "Summary of earlier turns" not in content
+    assert "- (nda) Under NDA" in content
+
+
+def test_anchors_are_exposed_as_a_copy():
+    history, _ = make_history()
+    history.update_context([Anchor("nda", "Under NDA")], None)
+    history.anchors.append(Anchor("compliance", "x"))
+    assert history.anchors == [Anchor("nda", "Under NDA")]
+
+
 # --- Session ---------------------------------------------------------------
 
 
@@ -180,13 +239,120 @@ def test_get_unknown_raises_not_found():
         make_store().get("nope")
 
 
-def test_delete_removes_session_and_unknown_is_noop():
+def test_delete_removes_session_and_reports_whether_it_existed():
     store = make_store()
     session = store.create()
-    store.delete(session.session_id)
-    store.delete(session.session_id)
+    assert store.delete(session.session_id) is True
+    assert store.delete(session.session_id) is False
     with pytest.raises(SessionNotFoundError):
         store.get(session.session_id)
+
+
+# --- Idle expiry -----------------------------------------------------------
+
+
+class FakeClock:
+    """Manually advanced UTC clock so expiry tests never sleep."""
+
+    def __init__(self) -> None:
+        self.current = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def __call__(self) -> datetime:
+        return self.current
+
+    def advance(self, seconds: float) -> None:
+        self.current += timedelta(seconds=seconds)
+
+
+def make_ttl_store(ttl: int, clock: FakeClock, max_sessions: int = 10) -> SessionStore:
+    return SessionStore(
+        render, max_turns=3, max_sessions=max_sessions, idle_ttl_seconds=ttl, clock=clock
+    )
+
+
+def test_get_after_idle_ttl_raises_and_removes_the_session():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock)
+    session = store.create()
+    clock.advance(61)
+    with pytest.raises(SessionNotFoundError):
+        store.get(session.session_id)
+    assert len(store) == 0
+
+
+def test_get_within_ttl_refreshes_the_idle_timer():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock)
+    session = store.create()
+    clock.advance(40)
+    assert store.get(session.session_id) is session
+    clock.advance(40)  # 80s since creation but only 40s since last use
+    assert store.get(session.session_id) is session
+
+
+def test_create_purges_expired_sessions_first():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock)
+    stale = store.create()
+    clock.advance(30)
+    fresh = store.create()
+    clock.advance(40)  # stale idle 70s, fresh idle 40s
+    store.create()
+    assert len(store) == 2
+    with pytest.raises(SessionNotFoundError):
+        store.get(stale.session_id)
+    assert store.get(fresh.session_id) is fresh
+
+
+def test_ttl_zero_disables_expiry():
+    clock = FakeClock()
+    store = make_ttl_store(0, clock)
+    session = store.create()
+    clock.advance(10**7)
+    assert store.get(session.session_id) is session
+
+
+def test_session_in_use_is_never_expired():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock)
+    session = store.create()
+    clock.advance(500)
+    with session.lock:
+        assert store.get(session.session_id) is session
+
+
+def test_delete_of_an_expired_session_reports_false():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock)
+    session = store.create()
+    clock.advance(61)
+    assert store.delete(session.session_id) is False
+
+
+def test_lru_cap_still_applies_with_ttl_enabled():
+    clock = FakeClock()
+    store = make_ttl_store(60, clock, max_sessions=2)
+    first = store.create()
+    store.create()
+    store.create()
+    assert len(store) == 2
+    with pytest.raises(SessionNotFoundError):
+        store.get(first.session_id)
+
+
+def test_idle_ttl_setting_defaults_to_disabled_and_reads_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from cag_estimate.config import Settings
+
+    assert Settings(anthropic_api_key="k", _env_file=None).session_idle_ttl_seconds == 0
+    monkeypatch.setenv("SESSION_IDLE_TTL_SECONDS", "900")
+    assert Settings(anthropic_api_key="k", _env_file=None).session_idle_ttl_seconds == 900
+
+
+def test_history_exposes_its_window_size():
+    history, _ = make_history(max_turns=4)
+    assert history.max_turns == 4
 
 
 def test_cap_evicts_least_recently_used():
@@ -232,3 +398,18 @@ def test_session_exposes_a_non_reentrant_lock_that_serializes_holders():
         assert not entered.wait(timeout=0.1)
     thread.join(timeout=2)
     assert entered.is_set()
+
+
+def test_compression_settings_have_defaults_and_read_the_environment(monkeypatch):
+    from cag_estimate.config import Settings
+
+    defaults = Settings(anthropic_api_key="k", _env_file=None)
+    assert defaults.session_compression_enabled is True
+    assert defaults.session_max_anchors == 5
+    assert defaults.session_summary_max_chars == 2000
+    monkeypatch.setenv("SESSION_COMPRESSION_ENABLED", "false")
+    monkeypatch.setenv("SESSION_MAX_ANCHORS", "2")
+    monkeypatch.setenv("SESSION_SUMMARY_MAX_CHARS", "300")
+    configured = Settings(anthropic_api_key="k", _env_file=None)
+    assert configured.session_compression_enabled is False
+    assert (configured.session_max_anchors, configured.session_summary_max_chars) == (2, 300)

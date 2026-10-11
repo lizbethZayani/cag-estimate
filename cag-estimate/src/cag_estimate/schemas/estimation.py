@@ -5,9 +5,13 @@ Validation messages are written to be actionable: structured extraction
 feeds them back to the LLM when it has to correct an invalid answer.
 """
 
-from typing import Literal
+import json
+from typing import Any, Literal
 
+import structlog
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+log = structlog.get_logger()
 
 Complexity = Literal["Simple", "Medium", "High"]
 
@@ -21,6 +25,15 @@ COMPLEXITY_HOURS: dict[str, tuple[int, int]] = {
 MIN_PROJECT_HOURS, MAX_PROJECT_HOURS = 8, 500
 MIN_HOURLY_RATE, MAX_HOURLY_RATE = 30, 150
 MIN_TASKS, MAX_TASKS = 3, 20
+
+
+def _check_total_hours(value: int) -> int:
+    if not MIN_PROJECT_HOURS <= value <= MAX_PROJECT_HOURS:
+        raise ValueError(
+            f"total_hours is {value}; it must be between {MIN_PROJECT_HOURS} "
+            f"and {MAX_PROJECT_HOURS}. Rescope the tasks to fit this range."
+        )
+    return value
 
 
 class EstimationRequest(BaseModel):
@@ -69,12 +82,7 @@ class ProjectSummary(BaseModel):
     @field_validator("total_hours")
     @classmethod
     def check_total_hours_range(cls, value: int) -> int:
-        if not MIN_PROJECT_HOURS <= value <= MAX_PROJECT_HOURS:
-            raise ValueError(
-                f"total_hours is {value}; it must be between {MIN_PROJECT_HOURS} "
-                f"and {MAX_PROJECT_HOURS}. Rescope the tasks to fit this range."
-            )
-        return value
+        return _check_total_hours(value)
 
     @field_validator("hourly_rate")
     @classmethod
@@ -105,14 +113,26 @@ class ProjectEstimation(BaseModel):
             )
         return tasks
 
+    @field_validator("summary", mode="before")
+    @classmethod
+    def parse_json_string_summary(cls, value: Any) -> Any:
+        """Models sometimes send the summary object as a JSON-encoded string."""
+        if not isinstance(value, str):
+            return value
+        try:
+            return json.loads(value)
+        except ValueError:
+            return value
+
     @model_validator(mode="after")
-    def check_total_matches_tasks(self) -> "ProjectEstimation":
-        task_hours = sum(task.estimated_hours for task in self.tasks)
-        if task_hours != self.summary.total_hours:
-            raise ValueError(
-                f"The sum of task hours is {task_hours} but summary.total_hours "
-                f"is {self.summary.total_hours}; set total_hours to {task_hours}."
-            )
+    def derive_total_hours(self) -> "ProjectEstimation":
+        """The total is derived from the tasks; a model's arithmetic slip is corrected."""
+        computed = sum(task.estimated_hours for task in self.tasks)
+        claimed = self.summary.total_hours
+        if computed != claimed:
+            log.warning("estimate_total_hours_corrected", claimed=claimed, computed=computed)
+            _check_total_hours(computed)
+            self.summary = self.summary.model_copy(update={"total_hours": computed})
         return self
 
 

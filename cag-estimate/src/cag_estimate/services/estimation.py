@@ -120,7 +120,6 @@ class EstimationService:
             system_prompt=system,
             user_message=user,
             response_model=ProjectEstimation,
-            max_tokens=MAX_TOKENS,
         )
         return result
 

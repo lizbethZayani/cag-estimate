@@ -280,10 +280,12 @@ Cache keys use the request inputs, not the rendered prompt text, so editing word
 | Rule | Value |
 |------|-------|
 | Task count | 3 to 20 |
-| Total hours | 8 to 500, and exactly the sum of the task hours |
+| Total hours | 8 to 500; derived from the task hours (see below) |
 | Hourly rate (in the result) | 30 to 150 |
 | Hours per complexity | Simple 4-24, Medium 10-64, High 16-112 |
 | `complexity` | `Simple`, `Medium` or `High` |
+
+`summary.total_hours` is derived, not trusted: when it differs from the sum of the task hours it is replaced by the sum (logged as `estimate_total_hours_corrected` with `claimed` and `computed`), and the 8 to 500 range is checked on the corrected value. Models often slip on this arithmetic and repeat the slip on every Instructor retry, which used to end as a 502. For the same reason a `summary` sent as a JSON-encoded string is parsed into the object. Every other rule still raises and triggers a retry.
 
 If retries are exhausted, the exception reaches the router and becomes a generic 502.
 
@@ -340,7 +342,7 @@ Open **http://localhost:8501** in your browser.
 
 ## Conversation memory (sessions)
 
-Sessions let several estimates in one conversation share context: the model remembers the project across turns, and PDF or text attachments become part of the input.
+Sessions let several estimates in one conversation share context: the model remembers the project across turns, and PDF, Word (`.docx`) or text attachments become part of the input.
 
 ### Start the project and run the tests
 
@@ -358,21 +360,23 @@ PYTHONPATH=src uv run pytest -q
 
 `PYTHONPATH=src` is needed on macOS: `uv run` re-syncs the editable install and the generated `.pth` file gets the hidden flag, so Python skips it and `cag_estimate` is not importable without it.
 
-The Streamlit default mode, **Conversation (memory)**, creates a session lazily, offers a transcript box plus a multi-file uploader (`pdf`, `txt`, `md`, `csv`, `json`), shows the accumulated `project_metadata` in a sidebar expander, and has a **New conversation** button that opens a fresh session.
+The Streamlit default mode, **Conversation (memory)**, creates a session lazily, offers a transcript box plus a multi-file uploader (`pdf`, `docx`, `txt`, `md`, `csv`, `json`), shows the accumulated `project_metadata` in a sidebar expander, and has a **New conversation** button that opens a fresh session.
 
 ### Endpoints
 
 | Method and path | Purpose |
 |-----------------|---------|
 | `POST /api/v1/sessions` | Create a session. `201` with `{"session_id": "<uuid4>"}` |
-| `GET /api/v1/sessions/{id}` | Snapshot: `session_id`, `project_metadata`, `turns` (`404` if unknown) |
+| `GET /api/v1/sessions/{id}` | Snapshot: `session_id`, `project_metadata`, `turns`, `max_turns` (window size), `message_count` (messages in the window, `turns * 2`), `created_at` and `updated_at` (UTC ISO datetimes). `404` if unknown or expired |
+| `DELETE /api/v1/sessions/{id}` | Discard a session now. `204` with no body; `404` if unknown or expired |
 | `POST /api/v1/sessions/{id}/estimate` | Estimate within the session (`multipart/form-data`) |
+| `POST /api/v1/sessions/{id}/estimate-acb` | Same contract, with an independent critic review ([Reviewed estimates](#reviewed-estimates-actor-critic)) |
 
 Fields of `POST /api/v1/sessions/{id}/estimate`:
 
 - `transcript` (required): up to 80,000 characters, not blank.
 - `hourly_rate` (optional, default `40`): between the same bounds as `/estimate`.
-- `attachments` (optional, repeatable): PDF, `.txt`, `.md`, `.csv` or `.json`. Defaults: at most 5 files, 5,000,000 bytes per file, 80,000 characters for transcript plus attachment text combined.
+- `attachments` (optional, repeatable): PDF, `.docx`, `.txt`, `.md`, `.csv` or `.json` (legacy `.doc` is not supported). Defaults: at most 5 files, 5,000,000 bytes per file, 80,000 characters for transcript plus attachment text combined.
 
 The response is the regular estimation (`result`, `prompt_version`, `cached`, which is always `false` here) plus `session_id`, `project_metadata`, `turns` and `attachments` (the file names used).
 
@@ -382,7 +386,7 @@ The response is the regular estimation (`result`, `prompt_version`, `cached`, wh
 | 404 | Unknown session |
 | 413 | Too many files, a file or the combined text over the limits |
 | 415 | Unsupported attachment type |
-| 422 | Blank transcript, hourly rate out of bounds, or an unreadable attachment (corrupt PDF, or a PDF with no extractable text) |
+| 422 | Blank transcript, hourly rate out of bounds, or an unreadable attachment (corrupt PDF or `.docx`, or a document with no extractable text) |
 | 502 | Any other failure; the message is generic and never carries upstream detail |
 
 ```bash
@@ -405,10 +409,10 @@ curl -s "http://localhost:8000/api/v1/sessions/$SID"
 The practice brief offers two paths: A, upload files to a provider Files API and reference them in the message, or B, extract the text in our service and append it to the transcript. This project uses **Path B** ([`services/attachments.py`](src/cag_estimate/services/attachments.py)), because:
 
 - **Provider-agnostic.** The LLM layer is LiteLLM with an Anthropic to OpenAI fallback. A Files API is provider-specific, so a fallback call would not see the files.
-- **Offline-testable.** Text extraction (`pypdf` for PDFs, UTF-8 decoding for the text formats) runs without network, so the whole flow is covered by tests with a fake LLM.
+- **Offline-testable.** Text extraction (`pypdf` for PDFs, `python-docx` for `.docx`, UTF-8 decoding for the text formats) runs without network, so the whole flow is covered by tests with a fake LLM.
 - **Guardrails see the document.** Moderation, prompt-injection and PII checks run on the transcript plus the attachment text combined, so an attachment cannot smuggle in what the transcript could not.
 
-Each attachment is appended after the transcript as `--- attachment: <filename> ---` followed by its text. File names are sanitized (path components and control characters removed, runs of three or more dashes collapsed) so a name cannot fake a separator. Limits are enforced while reading (a file is never fully buffered past its limit) and again on the combined text. Scanned PDFs have no text layer and are rejected with `422`; there is no OCR.
+Each attachment is appended after the transcript as `--- attachment: <filename> ---` followed by its text. File names are sanitized (path components and control characters removed, runs of three or more dashes collapsed) so a name cannot fake a separator. Limits are enforced while reading (a file is never fully buffered past its limit) and again on the combined text. For `.docx`, the text of non-empty paragraphs comes first, followed by the table rows (cells joined with ` | `, one row per line); this keeps the code simple at the cost of losing the exact position of tables. Scanned PDFs have no text layer and are rejected with `422`; there is no OCR.
 
 ### How `project_metadata` is extracted
 
@@ -424,29 +428,133 @@ Why not a second LLM call as extractor: it adds a call, cost, latency and a new 
 
 ### Memory versus history
 
-- **Memory (`project_metadata`)** holds long-term facts. It is injected into the system prompt as a `<project_metadata>` block (prompt version `v1`); with empty metadata, the first call of a session, no block is rendered and the prompt is identical to a non-session one.
-- **History** is a sliding window of the last `SESSION_MAX_TURNS` user/assistant pairs (default 6). When it overflows, the oldest pairs are dropped, always as whole pairs, so there is never an orphan assistant message.
+- **Memory (`project_metadata`)** holds long-term facts. It is injected into the system prompt as a `<project_metadata>` block (rendered by prompt `v1`, which `v2` includes); with empty metadata, the first call of a session, no block is rendered and the prompt is identical to a non-session one.
+- **History** is a sliding window of the last `SESSION_MAX_TURNS` user/assistant pairs (default 6). When it overflows, the oldest pairs leave the window, always as whole pairs, so there is never an orphan assistant message. They are not simply lost, see *History compression* below.
+- **History compression.** Evicted pairs are split in two. A user message that states a hard constraint becomes an **anchor** and stays for the whole session (only its compact user text, at most 500 characters, is kept, never the assistant JSON); at most `SESSION_MAX_ANCHORS` (default 5) are pinned and the oldest extra one is folded into the summary. Every other evicted pair is folded into one cumulative **summary**, capped at `SESSION_SUMMARY_MAX_CHARS` (default 2000). `SESSION_SUMMARY_MODE=llm` (default) asks the LLM to merge the previous summary with the evicted turns (the user text plus a short digest of each estimate: project name, total hours, total cost, task count); `extractive` writes one bullet per user message, dropping the oldest bullets first, and is also the automatic fallback when the LLM call fails or returns nothing. Set `SESSION_SUMMARY_MODEL` to a cheap model to keep the cost down. The conversation is passed to the summarizer as data, with an instruction not to follow anything written in it. Anchor kinds: `nda`, `signed_contract`, `scope_frozen`, `budget_locked`, `compliance` (HIPAA, GDPR, SOX, PCI, FDA, ISO 27001), `deadline_hard`, `contractual`, `explicit_commitment`. When there are anchors or a summary, the model receives one extra user message right after the system prompt, answered by a short assistant "Understood." so roles keep alternating:
+
+  ```text
+  [Earlier conversation context - the turns below are the live thread]
+  Pinned constraints from earlier turns:
+  - (nda) This project is under NDA ...
+  Summary of earlier turns:
+  - first evicted request ...
+  ```
+
+  `SESSION_COMPRESSION_ENABLED=false` restores the plain drop. Limitations: anchors are regex heuristics (they miss paraphrases and only skip simple negations such as "no NDA needed"), and the LLM summary can lose detail or omit a fact (the extractive mode is the deterministic alternative). Cost and latency: the summary costs one extra short LLM call (at most 600 output tokens) only on turns that evict from the window, and it runs inside the session lock, so that turn is slower and the next request on the same session waits for it. The summary prompt contains conversation text, so these calls bypass the exact cache and nothing is stored in Redis. A compaction problem never fails the request. `GET /api/v1/sessions/{id}` reports `anchors_count` and `summary_chars`.
 - **The system prompt is not part of the window.** It is regenerated from the current metadata on every call, so it is always present and never trimmed.
 - **Compact user turn.** The full text of a turn (transcript plus attachments) is sent to the model once, in the current message. What is stored in history is the transcript truncated to 4,000 characters plus the names of the attachments, so a large document does not repeat in every later turn. The assistant side stores the estimate as JSON.
 - **A failed turn changes nothing.** History and metadata are updated only after the estimate succeeds and passes the output guardrail.
 
+### Audience tier and conversational prompt v2
+
+Sessions use prompt **`v2`** (`prompts/estimation/v2/`); the non-session `/estimate` endpoints keep **`v1`**, which is unchanged (a test pins its exact bytes). `v2` includes the whole `v1` system prompt (schema, rules, `<project_metadata>`) and adds:
+
+- `<conversation_rules>`: the history is established context, the metadata block is the source of truth unless the user explicitly corrects it, and the model must always return the **updated FULL estimate** for everything agreed so far, never a delta, keeping earlier tasks unless the user removes scope and keeping `project_name` stable.
+- `<audience>`: a short framing chosen by the tier (executive: business outcomes, plain language, risks in business terms; pm: delivery, dependencies, milestones; developer: technical detail, components, integration points; default: balanced).
+- A closing line in the user message asking for the full updated estimate.
+
+Why: in a live session each follow-up ("Add a barcode scanning page") was estimated almost like a separate small project (total hours went 182, 124, 126, 172), instead of the updated full estimate. The response reports `prompt_version: "v2"`.
+
+The tier comes from `services/tier_resolver.py`, a **heuristic** (vocabulary cues, not a classifier; it can be wrong). It runs on the combined text of the turn (transcript plus attachments) and the metadata known before the turn. The first matching rule decides:
+
+1. `override`: the optional multipart field `tier` (`executive`, `pm`, `developer`, `default`) on `POST /sessions/{id}/estimate`; any other value is a `422`.
+2. `executive_cues`: CEO, CFO, board, investors, budget approval, ROI, executive summary...
+3. `pm_cues`: sprint, backlog, roadmap, milestone, stakeholder, timeline, deliverable...
+4. `developer_cues`: API, endpoint, schema, microservice, refactor, framework names...
+5. `technology_count`: the project already mentions 3 or more technologies.
+6. otherwise `default`.
+
+Cues are matched case-insensitively on whole words. A mixed message goes to its most senior reader (executive beats pm beats developer). The resolved tier and the rule that decided it are stored on the session after a successful turn only: `GET /sessions/{id}` returns `last_tier` and `last_tier_rule` (`null` before the first turn) and the estimate response returns `resolved_tier` and `tier_rule`. In the Streamlit "Conversation (memory)" mode, the **Audience** selector (Auto, Executive, PM, Developer) sends `tier` only when not on Auto, and the memory panel shows the resolved tier.
+
+### Reviewed estimates (actor-critic)
+
+`POST /api/v1/sessions/{id}/estimate-acb` takes the same multipart fields and returns the same errors (`400`, `404`, `413`, `415`, `422`, generic `502`) as `/estimate`, and audits each draft before it is returned. The response is the usual session response plus an `acb` object:
+
+```json
+"acb": {
+  "iterations": [{"iteration": 0, "decision_after": "accept", "critic_verdict": "accept",
+                  "critic_confidence": 90, "critic_failed": false, "issue_summary": []}],
+  "final_decision": "accept",
+  "iterations_run": 1,
+  "caveats": []
+}
+```
+
+**Cost.** One reviewed request costs up to `ACB_MAX_ITERATIONS` x (draft + review) LLM calls (2 drafts and 2 reviews with the default), and like every session estimate it bypasses the caches. Use `/estimate` when speed or cost matters.
+
+**The session changes once.** Drafts are never written to the history. Only the final estimate is committed, with exactly the history format `/estimate` stores, so the two routes can be mixed in one conversation. A failure before that point leaves the session untouched.
+
+- **Actor**: the normal session estimator. On a retry it receives the critic's latest review in an optional `<critic_feedback>` block of the `v2` user prompt (severity, category, field path, description and suggested fix of each issue).
+- **Critic** (`services/critic.py`): an independent auditor, one structured LLM call per draft, with the transcript and the estimates treated as data, never instructions. It returns a verdict (`accept`, `needs_iteration`, `reject`) and issues in eight categories: `math_error`, `hallucination`, `scope_mismatch`, `missing_task`, `history_inconsistency`, `unrealistic_estimate`, `missing_assumption`, `tier_mismatch`. `needs_iteration` requires at least one critical or major issue. If the critic call fails for any reason, the draft is accepted and the trace flags it (`critic_failed`).
+- **Boss** (`services/boss.py`): makes no LLM call. `accept` returns the draft; `needs_iteration` asks the actor for a new draft while iterations remain; `reject`, or an exhausted budget, returns the LAST draft unmodified and lists the open issues in `BossTrace.caveats` (at most 5).
+- `ACB_MAX_ITERATIONS` (default `2`) is one draft plus one directed retry, so the worst case is 2 actor and 2 critic calls. `CRITIC_MODEL` selects a cheaper model for the critic.
+- **Fail-open critic.** If the critic call fails, the draft is accepted and its round is flagged with `critic_failed: true` in `acb.iterations` (confidence `0`).
+- **Caveats are not part of the estimate.** When the budget runs out or the critic rejects, the last draft is returned unmodified and the open issues (at most 5) are listed in `acb.caveats`; `result` and the stored history stay clean.
+
+In Streamlit, the **Independent review (actor-critic)** checkbox (off by default) of the conversation mode uses this route and shows a **Review trace** expander with the rounds, the final decision and the caveats as a warning.
+
 ### Caching and volatility
 
 - **Session estimates bypass the exact and semantic caches.** The answer depends on the history and the accumulated metadata, not only on the submitted text, so a cache keyed on the text could serve an answer from another context.
-- **Sessions live in process memory.** They are lost on restart, are not shared between workers or processes, and are never persisted. `SESSION_MAX_SESSIONS` (default 1000) caps the store; beyond it the least recently used session is evicted and its id then answers `404`. A later stage would move sessions to Redis or a database, with a TTL and a shared store so any worker can serve any session.
+- **Sessions live in process memory.** They are lost on restart, are not shared between workers or processes, and are never persisted. `SESSION_MAX_SESSIONS` (default 1000) caps the store; beyond it the least recently used session is evicted and its id then answers `404`. `SESSION_IDLE_TTL_SECONDS` (default `0`, disabled) expires a session left idle for that long: its id then answers `404`. Use is what counts, so every request on a session restarts its timer; expiry is lazy (checked when the store is used, no background thread) and a session that is mid-request is never expired. `DELETE /api/v1/sessions/{id}` frees one explicitly, and the Streamlit **New conversation** button calls it for the old session. A later stage would move sessions to Redis or a database with a shared store so any worker can serve any session.
 - Requests on the same session are serialized with a lock, so concurrent turns cannot interleave.
 
 ### Configuration
 
-`SESSION_MAX_TURNS`, `SESSION_MAX_SESSIONS`, `ATTACHMENT_MAX_FILES`, `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_MAX_CHARS_TOTAL` and `LLM_STRUCTURED_MAX_TOKENS` are listed in [Environment Variables](#environment-variables). `docker-compose.yml` passes them to the `api` service with the defaults shown there. The structured token limit matters in conversations: later turns can produce larger estimates, and a limit that is too low truncates the JSON and fails the request.
+`SESSION_MAX_TURNS`, `SESSION_MAX_SESSIONS`, `SESSION_IDLE_TTL_SECONDS`, `SESSION_COMPRESSION_ENABLED`, `SESSION_MAX_ANCHORS`, `SESSION_SUMMARY_MAX_CHARS`, `SESSION_SUMMARY_MODE`, `SESSION_SUMMARY_MODEL`, `ATTACHMENT_MAX_FILES`, `ATTACHMENT_MAX_BYTES`, `ATTACHMENT_MAX_CHARS_TOTAL`, `TRANSCRIPT_MAX_CHARS`, `ACB_MAX_ITERATIONS`, `CRITIC_MODEL` and `LLM_STRUCTURED_MAX_TOKENS` are listed in [Environment Variables](#environment-variables). `docker-compose.yml` passes them to the `api` service with the defaults shown there. The structured token limit matters in conversations: later turns can produce larger estimates, and a limit that is too low truncates the JSON and fails the request.
 
 ### Tests
 
 The Step 7 integration tests are in [`tests/test_session_integration.py`](tests/test_session_integration.py) and use `httpx.AsyncClient` against the real app with a recording fake LLM: chained requests update the metadata, an attached PDF changes the estimate (a qualitative test of the plumbing: the fake LLM reacts to the text it receives), and eight turns never put more than `SESSION_MAX_TURNS` pairs in the history sent to the LLM. Endpoint tests are in `tests/test_sessions_endpoints.py`.
 
+## Evals
+
+A small golden dataset of scripted conversations, run against a **running** API and scored by deterministic metrics. Code: `src/cag_estimate/evals/` (`dataset.py`, `golden_dataset.json`, `metrics.py`, `runner.py`, `run.py`); the JSON ships inside the wheel.
+
+**What they are.** Structural and regression checks: totals add up, counts and hours stay in loose ranges, expected vocabulary appears, guardrails fire with the right reason and without echoing the input, the audience tier matches, and conversation memory stays consistent across turns.
+
+**What they are NOT.** They do not judge whether an estimate is good, and there is no LLM judge: scores from a second model would add cost, variance and a new thing to trust. For that reason `deepeval` is not a dependency. The runner never fakes a result: every turn is a real HTTP request, and a transport error is an errored case, never a pass.
+
+### Run
+
+```bash
+# 1. See the plan and the number of LLM calls. Sends nothing.
+PYTHONPATH=src uv run python -m cag_estimate.evals.run --dry-run
+
+# 2. Run it against the running stack. COST: this calls the real LLM
+#    (one estimate per turn; --mode acb adds up to ACB_MAX_ITERATIONS drafts and reviews per turn).
+PYTHONPATH=src uv run python -m cag_estimate.evals.run --base-url http://localhost:8000 --output report.json
+```
+
+Options: `--mode standard|acb`, `--limit N`, `--case ID` (repeatable), `--output PATH` (JSON report), `--timeout SECONDS`, `--dry-run`. A cost banner is printed before the first request. Exit codes: `0` every case passed every metric, `1` some case failed or errored, `2` usage problem or the API's `/health` is unreachable (nothing was estimated).
+
+### Metrics
+
+| Metric | Checks (final turn unless stated) |
+|--------|-----------------------------------|
+| `schema_consistency` | `total_hours` equals the sum of task hours; `total_cost_usd` equals hours x rate (1 USD tolerance); 3 to 20 tasks; valid complexity; `prompt_version` present |
+| `range_bounds` | task count and total hours inside the case's ranges |
+| `content_recall` | every `expected_in_text` term appears (case-insensitive) in project name, summary, task names and descriptions; at least one `expected_technologies_any_of` appears there or in `project_metadata` |
+| `guardrail_behavior` | expected case: HTTP 400 with exactly that `reason` and no echo of the input; any other case: a 400 is a failure |
+| `tier_expectation` | `resolved_tier` equals `expected_resolved_tier` |
+| `memory_consistency` | only with `check_memory`: every turn is 200, `turns` counts 1, 2, 3..., `project_name` is the same on every turn (case-insensitive), total hours never decrease |
+
+A metric that does not apply to a case reports `n/a` and passes. An errored case fails every metric.
+
+### Add a case
+
+Append an object to `golden_dataset.json`: `id` (3 to 64 characters, unique), `description` (say what regression it guards), `turns` (one or more messages of 20 to 80,000 characters sent in order to ONE session) and any expectations (`hourly_rate`, `tier`, `expect_guardrail_reason`, `expected_in_text`, `expected_technologies_any_of`, `expected_task_count_range`, `expected_hours_range`, `expected_resolved_tier`, `check_memory`). The offline test suite checks that guardrail cases really trigger `check_input` with the declared reason, that tier cases really resolve to their tier with `resolve_tier`, that other cases do not trip a guardrail, and that ranges are sane.
+
+### Limitations
+
+- **Flaky by nature.** The model is not deterministic and the ranges are loose on purpose (they catch regressions, not exact values), so a rare failure may be noise. Re-run before concluding anything; tighten or loosen a range with the evidence.
+- **Tier cases depend on the heuristic.** They test `services/tier_resolver.py` (cue words and rule order); changing the cues can change the expected tier.
+- **Memory rules are strict.** A renamed project or fewer total hours after an additive follow-up fails the case, even if a human might accept it.
+- **Cost and time.** A full run makes about 20 estimate calls; `--mode acb` multiplies that.
+
 ## Web UI (Rails)
 
-A Rails 8 web UI lives in [`../estimator-web/`](../estimator-web/README.md). It calls the structured `POST /api/v1/estimate` endpoint (not the streaming one), shows the estimate (summary, task table, totals) and keeps a history of successful estimates in Postgres. The Streamlit chat above, with its streaming markdown mode, is still available.
+A Rails 8 web UI lives in [`../estimator-web/`](../estimator-web/README.md). Its root page is a **conversation** over the session endpoints (`/api/v1/sessions/...`): follow-up messages, file attachments, an audience selector and a memory panel (project, team, technologies, scope, turns), with a "New conversation" button that deletes the session. The original one-shot form (`POST /api/v1/estimate`, not the streaming one) stays at `/estimations/new` as "Single estimate", and successful estimates are kept as History in Postgres. Sessions live in the API process memory, so an API restart ends the conversation and the UI starts a new one. The Streamlit chat above, with its streaming markdown mode, is still available.
 
 ```bash
 # from this directory
@@ -611,9 +719,18 @@ The checks below are now enforced in the code: the schema validators (`schemas/e
 | `LLM_STRUCTURED_MAX_TOKENS` | Output token limit for structured (estimate) calls | `8192` |
 | `SESSION_MAX_TURNS` | User/assistant pairs kept in a session's history window | `6` |
 | `SESSION_MAX_SESSIONS` | Cap on in-memory sessions (oldest-used evicted first) | `1000` |
+| `SESSION_IDLE_TTL_SECONDS` | Seconds of inactivity after which a session expires (`0` = never) | `0` |
+| `SESSION_COMPRESSION_ENABLED` | Pin anchor turns and summarize evicted history (`false` = plain drop) | `true` |
+| `SESSION_MAX_ANCHORS` | Anchor (hard-constraint) turns pinned per session | `5` |
+| `SESSION_SUMMARY_MAX_CHARS` | Longest cumulative summary of evicted turns, in characters | `2000` |
+| `SESSION_SUMMARY_MODE` | How evicted turns are summarized: `llm` (one short LLM call, extractive fallback on failure) or `extractive` (no LLM) | `llm` |
+| `SESSION_SUMMARY_MODEL` | Model for the summary call; use a cheap one. Empty = the primary model | empty |
 | `ATTACHMENT_MAX_FILES` | Attachments per session estimate | `5` |
 | `ATTACHMENT_MAX_BYTES` | Bytes per attachment | `5000000` |
 | `ATTACHMENT_MAX_CHARS_TOTAL` | Characters of transcript plus attachment text | `80000` |
+| `TRANSCRIPT_MAX_CHARS` | Longest transcript accepted by the session estimate endpoint | `80000` |
+| `ACB_MAX_ITERATIONS` | Reviewed estimates: drafts the actor may produce (`2` = one draft plus one directed retry; worst case 2 actor + 2 critic calls) | `2` |
+| `CRITIC_MODEL` | Model for the critic calls; use a cheap one. Empty = the primary model | empty |
 | `REDIS_URL` | Redis (Stack) URL | `redis://localhost:6379/0` |
 | `CACHE_TTL_SECONDS` | Exact-cache TTL | `86400` |
 | `EMBEDDING_MODEL` | Embedding model for the semantic cache | `text-embedding-3-small` |
