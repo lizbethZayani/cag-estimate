@@ -49,7 +49,7 @@ Context-Augmented Generation endpoint that:
 
 #### 7. **Tests**
 - Offline unit tests (no network, no Redis): run with `uv run pytest`; see [Running tests](#running-tests)
-- `tests/verify_api.py` and `tests/test_verification.py` are the older verification scripts; see [VERIFICATION.md](VERIFICATION.md)
+- For end-to-end checks against the running API, the evals and the Rails tests see [VERIFICATION.md](VERIFICATION.md)
 
 ### 🚀 Quick Start
 
@@ -178,7 +178,7 @@ cag-estimate/
 │       ├── streamlit_app.py             # Chat UI (streaming + structured)
 │       ├── estimate_client.py           # HTTP client with safe error messages
 │       └── view_models.py               # Pure presentation helpers
-├── tests/                               # Offline pytest suite (+ legacy verify_api.py)
+├── tests/                               # Offline pytest suite
 ├── session4/NOTES.md                    # Session 4 changes vs the reference repo
 ├── run_streamlit.sh                     # Launches the chat UI
 ├── Dockerfile                           # API container image
@@ -671,7 +671,7 @@ Token usage and cost metrics are no longer part of the structured response; they
 
 ## Verification Pipeline
 
-The checks below are now enforced in the code: the schema validators (`schemas/estimation.py`) and the output guardrail run on every structured request. `tests/test_verification.py` and `tests/verify_api.py` are the older stand-alone scripts and still describe the previous response shape. For an end-to-end check of the current API see [VERIFICATION.md](VERIFICATION.md). The ranges listed here are the original guidance; the enforced values are in [Structured output and validators](#structured-output-and-validators).
+The checks below are now enforced in the code: the schema validators (`schemas/estimation.py`) and the output guardrail run on every structured request. For an end-to-end check of the current API see [VERIFICATION.md](VERIFICATION.md). The ranges listed here are the original guidance; the enforced values are in [Structured output and validators](#structured-output-and-validators).
 
 ### 1. Schema Validation ✓
 - Verify response matches expected JSON structure

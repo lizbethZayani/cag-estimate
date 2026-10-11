@@ -58,7 +58,7 @@ shopping carts creation base on the grocery shops around where you live..."
 cag-estimate/
 ├── cag-estimate/                     # Main project folder
 │   ├── README.md                     # ⭐ FULL DOCUMENTATION HERE
-│   ├── VERIFICATION.md               # Verification pipeline guide
+│   ├── VERIFICATION.md               # Verification guide
 │   ├── pyproject.toml                # Project configuration
 │   ├── .env.example                  # Environment template
 │   ├── src/cag_estimate/
@@ -67,9 +67,7 @@ cag-estimate/
 │   │   ├── routers/estimations.py    # API endpoints
 │   │   ├── services/llm_service.py   # LLM integration
 │   │   └── context/examples.py       # Reference examples
-│   └── tests/
-│       ├── test_verification.py      # Verification tests (9/9 passing)
-│       └── verify_api.py             # API integration tests
+│   └── tests/                        # Offline pytest suite
 └── README.md                          # This file
 ```
 
@@ -94,7 +92,7 @@ cag-estimate/
 ## 🔗 Important Links
 
 📖 **[Full Documentation](./cag-estimate/README.md)** - Complete setup, API guide, examples  
-🧪 **[Verification Pipeline](./cag-estimate/VERIFICATION.md)** - Manager's confidence levels guide  
+🧪 **[Verification Pipeline](./cag-estimate/VERIFICATION.md)** - End-to-end checks, evals and validation rules  
 🐍 **[Python Project Config](./cag-estimate/pyproject.toml)** - Dependencies and settings  
 📝 **[Environment Template](./cag-estimate/.env.example)** - Configuration template  
 
@@ -138,7 +136,7 @@ Verification Pipeline: 9/9 tests ✅ PASSING
 ## 🎯 Next Steps
 
 1. **[Read the Full Documentation](./cag-estimate/README.md)** for setup instructions
-2. **[Review Verification Guide](./cag-estimate/VERIFICATION.md)** for manager workflow
+2. **[Review Verification Guide](./cag-estimate/VERIFICATION.md)** for the end-to-end checks
 3. **Navigate to `cag-estimate/`** and follow the Getting Started section
 
 ---
