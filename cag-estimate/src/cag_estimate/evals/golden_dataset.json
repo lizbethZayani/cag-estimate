@@ -27,7 +27,7 @@
     "turns": [
       "Every night we need to collect sales exports from three regional shops, clean and merge them, load the result into a warehouse and refresh a reporting dashboard for the finance team. We want it orchestrated with Airflow, transformed with Python and loaded into PostgreSQL, with alerts when a nightly run fails."
     ],
-    "expected_in_text": ["data"],
+    "expected_in_text": ["sales", "nightly"],
     "expected_technologies_any_of": ["Airflow", "Python", "PostgreSQL"],
     "expected_task_count_range": [4, 20],
     "expected_hours_range": [40, 500]
@@ -38,7 +38,7 @@
     "turns": [
       "Our company needs a small internal tool where employees request time off, their manager approves or rejects the request, and the human resources team sees a calendar of who is away. It should send an email when a request changes state and only be reachable from our company network."
     ],
-    "expected_in_text": ["leave", "approv"],
+    "expected_in_text": ["approv", "calendar"],
     "expected_task_count_range": [3, 20],
     "expected_hours_range": [30, 500]
   },

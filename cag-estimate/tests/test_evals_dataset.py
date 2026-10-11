@@ -61,6 +61,17 @@ def test_memory_cases_have_several_turns(cases: list[GoldenCase]) -> None:
         assert not case.check_memory or len(case.turns) >= 2, case.id
 
 
+def test_expected_terms_can_be_derived_from_the_case_text(cases: list[GoldenCase]) -> None:
+    """A model repeats the user's words: an expected term the text never uses is a dataset bug.
+
+    A live run once failed `leave` on a transcript that only said "time off".
+    """
+    for case in cases:
+        text = " ".join(case.turns).lower()
+        for term in case.expected_in_text:
+            assert term.lower() in text, f"{case.id}: '{term}' never appears in the turns"
+
+
 def test_guardrail_cases_really_trigger_the_declared_reason(cases: list[GoldenCase]) -> None:
     guarded = [case for case in cases if case.expect_guardrail_reason]
     assert {case.expect_guardrail_reason for case in guarded} >= {"prompt_injection", "pii"}
