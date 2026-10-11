@@ -12,6 +12,7 @@ from cag_estimate.cache.vectorizer import LazyOpenAIVectorizer
 from cag_estimate.config import get_settings
 from cag_estimate.prompts import render_system_prompt
 from cag_estimate.services.cache import get_cache
+from cag_estimate.services.critic import Critic
 from cag_estimate.services.estimation import EstimationService
 from cag_estimate.services.llm_summarizer import LlmSummarizer, TextCompleter
 from cag_estimate.services.llm_wrapper import get_llm_wrapper
@@ -121,6 +122,11 @@ def build_history_compactor(wrapper: TextCompleter | None = None) -> HistoryComp
 def get_session_estimation_service() -> SessionEstimationService:
     """Process-wide session estimation service (no cache: it bypasses both caches)."""
     wrapper = get_llm_wrapper()
+    settings = get_settings()
     return SessionEstimationService(
-        wrapper, build_moderation_client(), build_history_compactor(wrapper)
+        wrapper,
+        build_moderation_client(),
+        build_history_compactor(wrapper),
+        Critic(wrapper, settings.critic_model),
+        settings.acb_max_iterations,
     )

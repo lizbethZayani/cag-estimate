@@ -5,8 +5,9 @@ between workers. Session estimates bypass the exact and semantic caches,
 because the answer depends on the conversation, not only on the submitted text.
 """
 
+from collections.abc import Callable
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, TypeVar
 
 import structlog
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
@@ -16,11 +17,13 @@ from cag_estimate.config import get_settings
 from cag_estimate.dependencies import get_session_estimation_service, get_session_store
 from cag_estimate.guardrails.input import InputGuardrailViolation
 from cag_estimate.routers.estimations import UPSTREAM_ERROR, rejection_body
+from cag_estimate.schemas.acb import ACBSessionResponse
 from cag_estimate.schemas.estimation import MAX_HOURLY_RATE, MIN_HOURLY_RATE
 from cag_estimate.schemas.session import ProjectMetadata, SessionCreated, SessionEstimationResponse
 from cag_estimate.services.attachments import (
     AttachmentError,
     AttachmentTooLargeError,
+    ExtractedAttachment,
     UnsupportedAttachmentError,
     extract_uploads,
 )
@@ -29,6 +32,8 @@ from cag_estimate.services.sessions import Session, SessionNotFoundError, Sessio
 from cag_estimate.services.tier_resolver import Tier
 
 log = structlog.get_logger()
+
+ResponseT = TypeVar("ResponseT", bound=SessionEstimationResponse)
 
 router = APIRouter(prefix="/api/v1", tags=["sessions"])
 
@@ -118,31 +123,19 @@ def delete_session(session_id: str, store: Store) -> Response:
     return Response(status_code=204)
 
 
-@router.post("/sessions/{session_id}/estimate", response_model=SessionEstimationResponse)
-def estimate_in_session(
+def _handle_estimate(
+    store: SessionStore,
     session_id: str,
-    store: Store,
-    service: Service,
-    transcript: Transcript,
-    hourly_rate: HourlyRate = 40,
-    tier: AudienceTier = None,
-    attachments: Annotated[list[UploadFile] | None, File()] = None,
-) -> SessionEstimationResponse | JSONResponse:
-    """Estimate within a session (``multipart/form-data``: transcript + optional files).
-
-    Attachments (PDF, DOCX, txt, md, csv, json) are converted to text and appended to
-    the transcript. The optional ``tier`` field (executive, pm, developer, default)
-    forces the audience; without it the tier is inferred. Session estimates bypass the caches; the session is
-    in-memory only. Errors: unknown session 404, too large 413, unsupported
-    type 415, unreadable attachment or bad form 422, rejected input 400
-    ``{"reason", "message"}``, any other failure a generic 502.
-    """
+    transcript: str,
+    attachments: list[UploadFile] | None,
+    estimate: Callable[[Session, list[ExtractedAttachment]], ResponseT],
+) -> ResponseT | JSONResponse:
+    """Shared request flow of both estimate routes: validate, read uploads, map errors."""
     uploads = attachments or []
     try:
         _validate_transcript(transcript)
         session = _get_session(store, session_id)
-        extracted = extract_uploads(uploads)
-        return service.estimate(session, transcript, extracted, hourly_rate, tier)
+        return estimate(session, extract_uploads(uploads))
     except AttachmentError as exc:
         log.info("session_attachment_rejected", error_type=type(exc).__name__)
         raise _attachment_http_error(exc) from exc
@@ -157,3 +150,63 @@ def estimate_in_session(
     finally:
         for upload in uploads:
             upload.file.close()
+
+
+@router.post("/sessions/{session_id}/estimate", response_model=SessionEstimationResponse)
+def estimate_in_session(
+    session_id: str,
+    store: Store,
+    service: Service,
+    transcript: Transcript,
+    hourly_rate: HourlyRate = 40,
+    tier: AudienceTier = None,
+    attachments: Annotated[list[UploadFile] | None, File()] = None,
+) -> SessionEstimationResponse | JSONResponse:
+    """Estimate within a session (``multipart/form-data``: transcript + optional files).
+
+    Attachments (PDF, DOCX, txt, md, csv, json) are converted to text and appended to
+    the transcript. The optional ``tier`` field (executive, pm, developer, default)
+    forces the audience; without it the tier is inferred. Session estimates bypass the
+    caches; the session is in-memory only. Errors: unknown session 404, too large 413,
+    unsupported type 415, unreadable attachment or bad form 422, rejected input 400
+    ``{"reason", "message"}``, any other failure a generic 502.
+    """
+    return _handle_estimate(
+        store,
+        session_id,
+        transcript,
+        attachments,
+        lambda session, extracted: service.estimate(
+            session, transcript, extracted, hourly_rate, tier
+        ),
+    )
+
+
+@router.post("/sessions/{session_id}/estimate-acb", response_model=ACBSessionResponse)
+def estimate_reviewed_in_session(
+    session_id: str,
+    store: Store,
+    service: Service,
+    transcript: Transcript,
+    hourly_rate: HourlyRate = 40,
+    tier: AudienceTier = None,
+    attachments: Annotated[list[UploadFile] | None, File()] = None,
+) -> ACBSessionResponse | JSONResponse:
+    """Estimate within a session with an independent critic reviewing each draft.
+
+    Same multipart contract and errors as ``/estimate``; the response adds ``acb``
+    (iterations, final decision, caveats). Cost: up to ``ACB_MAX_ITERATIONS`` x
+    (draft + review) LLM calls, so it is slower and more expensive than ``/estimate``.
+    Like all session estimates it bypasses the caches. The session changes once,
+    from the final estimate; open issues are reported in ``acb.caveats`` and never
+    written into the estimate.
+    """
+    return _handle_estimate(
+        store,
+        session_id,
+        transcript,
+        attachments,
+        lambda session, extracted: service.estimate_with_acb(
+            session, transcript, extracted, hourly_rate, tier
+        ),
+    )
