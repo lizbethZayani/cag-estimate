@@ -515,3 +515,95 @@ def test_get_session_reads_the_last_tier():
     with patch("estimate_client.requests.get", return_value=_response(200, body)):
         snapshot = estimate_client.get_session("s")
     assert (snapshot.last_tier, snapshot.last_tier_rule) == ("developer", "developer_cues")
+
+
+# ---------- reviewed estimates (actor-critic) ----------
+
+ACB_ACCEPTED = {
+    "iterations": [
+        {"iteration": 0, "decision_after": "iterate", "critic_verdict": "needs_iteration",
+         "critic_confidence": 70, "critic_failed": False,
+         "issue_summary": ["[major] math_error @ summary.total_hours"]},
+        {"iteration": 1, "decision_after": "accept", "critic_verdict": "accept",
+         "critic_confidence": 90, "critic_failed": False, "issue_summary": []},
+    ],
+    "final_decision": "accept", "iterations_run": 2, "caveats": [],
+}
+ACB_OPEN = {
+    "iterations": [
+        {"iteration": 0, "decision_after": "synthesize", "critic_verdict": "reject",
+         "critic_confidence": 0, "critic_failed": True, "issue_summary": []},
+    ],
+    "final_decision": "synthesize", "iterations_run": 1,
+    "caveats": ["[major] scope_mismatch (tasks[1]): not in the transcript"],
+}
+
+
+def test_trace_rows_describe_each_review_round():
+    rows = view_models.trace_rows(ACB_ACCEPTED)
+    assert [row["Round"] for row in rows] == [1, 2]
+    assert rows[0]["Verdict"] == "needs_iteration" and rows[0]["Confidence"] == "70%"
+    assert rows[0]["Issues"] == "[major] math_error @ summary.total_hours"
+    assert rows[1]["Issues"] == view_models.EMPTY_VALUE and rows[1]["Next step"] == "accept"
+
+
+def test_trace_rows_flag_a_failed_critic_instead_of_showing_confidence():
+    row = view_models.trace_rows(ACB_OPEN)[0]
+    assert row["Critic"] == view_models.CRITIC_FAILED_LABEL
+    assert row["Confidence"] == view_models.EMPTY_VALUE
+
+
+def test_trace_headline_and_caveats():
+    assert "accepted" in view_models.trace_headline(ACB_ACCEPTED).lower()
+    assert "2 review round" in view_models.trace_headline(ACB_ACCEPTED)
+    assert "open issues" in view_models.trace_headline(ACB_OPEN).lower()
+    assert view_models.caveat_lines(ACB_ACCEPTED) == []
+    assert view_models.caveat_lines(ACB_OPEN) == ACB_OPEN["caveats"]
+
+
+@pytest.mark.parametrize(
+    ("reviewed", "suffix"), [(True, "/sessions/abc/estimate-acb"), (False, "/sessions/abc/estimate")]
+)
+def test_reviewed_flag_selects_the_endpoint(reviewed, suffix):
+    with patch("estimate_client.requests.post", return_value=_response(200, SESSION_BODY)) as post:
+        estimate_client.send_session_estimate("abc", "t", 40, [], reviewed=reviewed)
+    assert post.call_args.args[0].endswith(suffix)
+
+
+def test_send_session_estimate_reads_the_acb_trace_when_present():
+    with patch("estimate_client.requests.post",
+               return_value=_response(200, {**SESSION_BODY, "acb": ACB_OPEN})):
+        reviewed = estimate_client.send_session_estimate("abc", "t", 40, [], reviewed=True)
+    with patch("estimate_client.requests.post", return_value=_response(200, SESSION_BODY)):
+        plain = estimate_client.send_session_estimate("abc", "t", 40, [])
+    assert reviewed.acb == ACB_OPEN and plain.acb is None
+
+
+def _review_checkbox(app):
+    return next(c for c in app.checkbox if c.label == "Independent review (actor-critic)")
+
+
+def test_review_checkbox_is_off_by_default_and_sends_the_plain_flow(_no_real_session_calls):
+    with patch("estimate_client.send_session_estimate", return_value=_session_answer()) as send:
+        app = _conversation_app()
+        assert _review_checkbox(app).value is False
+        app.text_area[0].set_value("Bookstore").run()
+        _send_button(app).click().run()
+    assert send.call_args.kwargs["reviewed"] is False
+    assert not any("Review trace" in e.label for e in app.expander)
+
+
+def test_reviewed_turn_shows_the_trace_and_caveats_and_survives_reruns(_no_real_session_calls):
+    answer = _session_answer(acb=ACB_OPEN)
+    with patch("estimate_client.send_session_estimate", return_value=answer) as send:
+        app = _conversation_app()
+        _review_checkbox(app).check().run()
+        app.text_area[0].set_value("Bookstore").run()
+        _send_button(app).click().run()
+    assert send.call_args.kwargs["reviewed"] is True
+    assert any("Review trace" in e.label for e in app.expander)
+    assert any("scope_mismatch" in w.value for w in app.warning)
+    stored = app.session_state["conversation_messages"][-1]
+    assert stored["acb"] == ACB_OPEN
+    app.run()
+    assert any("Review trace" in e.label for e in app.expander)

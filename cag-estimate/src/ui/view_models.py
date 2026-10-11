@@ -35,6 +35,7 @@ SESSION_STATUS_MESSAGES = {
     422: "The message or an attachment could not be read. Check them and try again.",
 }
 EMPTY_VALUE = "—"
+CRITIC_FAILED_LABEL = "unavailable (accepted by default)"
 
 
 def guardrail_message(reason: str | None) -> str:
@@ -134,3 +135,33 @@ def user_turn_text(text: str, file_names: list[str]) -> str:
     if not file_names:
         return text
     return f"{text}\n\n📎 {', '.join(file_names)}"
+
+
+def trace_rows(acb: dict[str, Any]) -> list[dict[str, Any]]:
+    """Table rows for the review trace: one per actor + critic round."""
+    return [
+        {
+            "Round": step["iteration"] + 1,
+            "Verdict": step["critic_verdict"],
+            "Confidence": (
+                EMPTY_VALUE if step["critic_failed"] else f"{step['critic_confidence']}%"
+            ),
+            "Critic": CRITIC_FAILED_LABEL if step["critic_failed"] else "ok",
+            "Issues": "; ".join(step["issue_summary"]) or EMPTY_VALUE,
+            "Next step": step["decision_after"],
+        }
+        for step in acb["iterations"]
+    ]
+
+
+def trace_headline(acb: dict[str, Any]) -> str:
+    """One-line outcome of the review for the trace expander."""
+    rounds = f"{acb['iterations_run']} review round(s)"
+    if acb["final_decision"] == "accept":
+        return f"Accepted after {rounds}."
+    return f"Not fully resolved after {rounds}: open issues are listed below."
+
+
+def caveat_lines(acb: dict[str, Any]) -> list[str]:
+    """Issues the critic left open (empty when the estimate was accepted)."""
+    return list(acb.get("caveats") or [])

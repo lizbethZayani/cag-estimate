@@ -47,6 +47,7 @@ class SessionAnswer(SessionSnapshot):
     """Outcome of a session estimate: result plus fresh memory, or a safe error."""
 
     result: dict[str, Any] | None = None
+    acb: dict[str, Any] | None = None
 
 
 UploadFile = tuple[str, bytes, str]
@@ -149,15 +150,19 @@ def send_session_estimate(
     hourly_rate: int,
     files: list[UploadFile],
     tier: str | None = None,
+    reviewed: bool = False,
 ) -> SessionAnswer:
-    """Call ``POST /api/v1/sessions/{id}/estimate`` (multipart) and return the answer or error."""
+    """Call the session estimate route (multipart) and return the answer or error.
+
+    ``reviewed`` selects ``/estimate-acb`` (independent critic) instead of ``/estimate``.
+    """
     multipart = [("attachments", (name, content, mime)) for name, content, mime in files]
     form = {"transcript": transcript, "hourly_rate": hourly_rate}
     if tier:
         form["tier"] = tier
     try:
         response = requests.post(
-            f"{_sessions_url()}/{session_id}/estimate",
+            f"{_sessions_url()}/{session_id}/{'estimate-acb' if reviewed else 'estimate'}",
             data=form,
             files=multipart,
             timeout=TIMEOUT_SECONDS,
@@ -175,6 +180,7 @@ def send_session_estimate(
         turns=body.get("turns", 0),
         last_tier=body.get("resolved_tier"),
         last_tier_rule=body.get("tier_rule"),
+        acb=body.get("acb") if isinstance(body.get("acb"), dict) else None,
     )
 
 

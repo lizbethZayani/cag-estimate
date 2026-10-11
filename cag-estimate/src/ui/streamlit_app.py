@@ -161,11 +161,23 @@ def render_structured(result: dict[str, Any], cached: bool, caption: str | None 
             st.caption(caption)
 
 
+def render_review_trace(acb: dict[str, Any]) -> None:
+    """Expander with the critic rounds, the final decision and any open caveats."""
+    with st.expander("Review trace", expanded=False):
+        st.write(view_models.trace_headline(acb))
+        st.dataframe(view_models.trace_rows(acb), hide_index=True)
+        caveats = view_models.caveat_lines(acb)
+        if caveats:
+            st.warning("**Open issues**\n" + "\n".join(f"- {caveat}" for caveat in caveats))
+
+
 def render_message(message: dict[str, Any]) -> None:
     """Render one stored message according to its kind."""
     kind = message.get("kind", "text")
     if kind == "structured":
         render_structured(message["result"], message["cached"], message.get("caption"))
+        if message.get("acb"):
+            render_review_trace(message["acb"])
     elif kind == "error":
         st.error(message["content"])
     else:
@@ -375,11 +387,14 @@ def apply_session_answer(answer: estimate_client.SessionAnswer) -> bool:
         result=answer.result,
         cached=False,
         caption=view_models.turn_caption(answer.turns),
+        acb=answer.acb,
     )
     return True
 
 
-def send_turn(text: str, hourly_rate: int, uploads: list[Any], tier: str | None) -> None:
+def send_turn(
+    text: str, hourly_rate: int, uploads: list[Any], tier: str | None, reviewed: bool
+) -> None:
     files = [(f.name, f.getvalue(), f.type or "application/octet-stream") for f in uploads]
     names = [name for name, _, _ in files]
     store_message(
@@ -387,7 +402,7 @@ def send_turn(text: str, hourly_rate: int, uploads: list[Any], tier: str | None)
     )
     with st.spinner("Estimating... this can take up to a minute"):
         answer = estimate_client.send_session_estimate(
-            st.session_state.session_id, text, hourly_rate, files, tier
+            st.session_state.session_id, text, hourly_rate, files, tier, reviewed=reviewed
         )
     if apply_session_answer(answer):
         st.session_state.input_nonce += 1
@@ -414,6 +429,11 @@ def render_conversation_inputs() -> None:
         DEFAULT_HOURLY_RATE,
     )
     audience = st.selectbox("Audience", list(view_models.AUDIENCE_OPTIONS))
+    reviewed = st.checkbox(
+        "Independent review (actor-critic)",
+        help="A second model reviews the estimate and may request one rewrite. "
+        "Slower and costs more LLM calls.",
+    )
     if not st.button("Send", type="primary"):
         return
     if not text.strip():
@@ -421,7 +441,7 @@ def render_conversation_inputs() -> None:
     elif st.session_state.session_id is None:
         st.error(st.session_state.session_error or view_models.GENERIC_ERROR)
     else:
-        send_turn(text, int(rate), uploads, view_models.audience_tier(audience))
+        send_turn(text, int(rate), uploads, view_models.audience_tier(audience), reviewed)
 
 
 def render_conversation() -> None:
