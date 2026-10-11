@@ -15,47 +15,7 @@ from cag_estimate.evals.metrics import (
     TurnResult,
     run_all_metrics,
 )
-
-TURN = "We need a small bookstore web shop with a catalog and checkout."
-
-
-def make_case(**overrides: Any) -> GoldenCase:
-    return GoldenCase.model_validate(
-        {"id": "case-one", "description": "d", "turns": [TURN], **overrides}
-    )
-
-
-def make_body(turns: int = 1, hours: int = 30, name: str = "Bookstore", **extra: Any) -> dict:
-    tasks = [
-        {
-            "task_id": n,
-            "name": f"Catalog task {n}",
-            "description": "Build the Django catalog",
-            "estimated_hours": hours // 3,
-            "estimated_cost_usd": hours // 3 * 40,
-            "complexity": "Medium",
-            "includes": ["code"],
-        }
-        for n in range(1, 4)
-    ]
-    body = {
-        "result": {
-            "project_name": name,
-            "meeting_summary": "A web shop for books",
-            "tasks": tasks,
-            "summary": {
-                "total_hours": hours // 3 * 3,
-                "total_cost_usd": hours // 3 * 3 * 40,
-                "hourly_rate": 40,
-            },
-        },
-        "prompt_version": "v2",
-        "turns": turns,
-        "resolved_tier": "default",
-        "project_metadata": {"mentioned_technologies": ["Stripe"]},
-    }
-    body.update(extra)
-    return body
+from tests.eval_fakes import TURN, make_body, make_case
 
 
 def turn(body: dict | None = None, status: int = 200) -> TurnResult:
