@@ -107,10 +107,10 @@ cag-estimate/
 
 ## 💰 Pricing
 
-**Per Estimation Request:** ~$0.00006 (less than a penny!)
-- Input tokens: $3 per 1M
-- Output tokens: $15 per 1M
-- Ultra-affordable for production use
+**Per structured estimation request:** about 1-2 cents with Haiku 4.5
+- Input tokens: $1 per 1M
+- Output tokens: $5 per 1M
+- Conversation turns cost more as the history grows, and reviewed estimates (actor-critic) make extra calls per turn
 
 ## ✅ Testing Status
 
