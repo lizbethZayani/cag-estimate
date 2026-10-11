@@ -370,6 +370,7 @@ The Streamlit default mode, **Conversation (memory)**, creates a session lazily,
 | `GET /api/v1/sessions/{id}` | Snapshot: `session_id`, `project_metadata`, `turns`, `max_turns` (window size), `message_count` (messages in the window, `turns * 2`), `created_at` and `updated_at` (UTC ISO datetimes). `404` if unknown or expired |
 | `DELETE /api/v1/sessions/{id}` | Discard a session now. `204` with no body; `404` if unknown or expired |
 | `POST /api/v1/sessions/{id}/estimate` | Estimate within the session (`multipart/form-data`) |
+| `POST /api/v1/sessions/{id}/estimate-acb` | Same contract, with an independent critic review ([Reviewed estimates](#reviewed-estimates-actor-critic)) |
 
 Fields of `POST /api/v1/sessions/{id}/estimate`:
 
@@ -467,12 +468,30 @@ Cues are matched case-insensitively on whole words. A mixed message goes to its 
 
 ### Reviewed estimates (actor-critic)
 
-The building blocks for estimates that are audited before they are returned. The HTTP endpoint that uses them comes in a later stage; today they are library code with offline tests.
+`POST /api/v1/sessions/{id}/estimate-acb` takes the same multipart fields and returns the same errors (`400`, `404`, `413`, `415`, `422`, generic `502`) as `/estimate`, and audits each draft before it is returned. The response is the usual session response plus an `acb` object:
+
+```json
+"acb": {
+  "iterations": [{"iteration": 0, "decision_after": "accept", "critic_verdict": "accept",
+                  "critic_confidence": 90, "critic_failed": false, "issue_summary": []}],
+  "final_decision": "accept",
+  "iterations_run": 1,
+  "caveats": []
+}
+```
+
+**Cost.** One reviewed request costs up to `ACB_MAX_ITERATIONS` x (draft + review) LLM calls (2 drafts and 2 reviews with the default), and like every session estimate it bypasses the caches. Use `/estimate` when speed or cost matters.
+
+**The session changes once.** Drafts are never written to the history. Only the final estimate is committed, with exactly the history format `/estimate` stores, so the two routes can be mixed in one conversation. A failure before that point leaves the session untouched.
 
 - **Actor**: the normal session estimator. On a retry it receives the critic's latest review in an optional `<critic_feedback>` block of the `v2` user prompt (severity, category, field path, description and suggested fix of each issue).
 - **Critic** (`services/critic.py`): an independent auditor, one structured LLM call per draft, with the transcript and the estimates treated as data, never instructions. It returns a verdict (`accept`, `needs_iteration`, `reject`) and issues in eight categories: `math_error`, `hallucination`, `scope_mismatch`, `missing_task`, `history_inconsistency`, `unrealistic_estimate`, `missing_assumption`, `tier_mismatch`. `needs_iteration` requires at least one critical or major issue. If the critic call fails for any reason, the draft is accepted and the trace flags it (`critic_failed`).
 - **Boss** (`services/boss.py`): makes no LLM call. `accept` returns the draft; `needs_iteration` asks the actor for a new draft while iterations remain; `reject`, or an exhausted budget, returns the LAST draft unmodified and lists the open issues in `BossTrace.caveats` (at most 5).
 - `ACB_MAX_ITERATIONS` (default `2`) is one draft plus one directed retry, so the worst case is 2 actor and 2 critic calls. `CRITIC_MODEL` selects a cheaper model for the critic.
+- **Fail-open critic.** If the critic call fails, the draft is accepted and its round is flagged with `critic_failed: true` in `acb.iterations` (confidence `0`).
+- **Caveats are not part of the estimate.** When the budget runs out or the critic rejects, the last draft is returned unmodified and the open issues (at most 5) are listed in `acb.caveats`; `result` and the stored history stay clean.
+
+In Streamlit, the **Independent review (actor-critic)** checkbox (off by default) of the conversation mode uses this route and shows a **Review trace** expander with the rounds, the final decision and the caveats as a warning.
 
 ### Caching and volatility
 
