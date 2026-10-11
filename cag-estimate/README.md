@@ -507,6 +507,51 @@ In Streamlit, the **Independent review (actor-critic)** checkbox (off by default
 
 The Step 7 integration tests are in [`tests/test_session_integration.py`](tests/test_session_integration.py) and use `httpx.AsyncClient` against the real app with a recording fake LLM: chained requests update the metadata, an attached PDF changes the estimate (a qualitative test of the plumbing: the fake LLM reacts to the text it receives), and eight turns never put more than `SESSION_MAX_TURNS` pairs in the history sent to the LLM. Endpoint tests are in `tests/test_sessions_endpoints.py`.
 
+## Evals
+
+A small golden dataset of scripted conversations, run against a **running** API and scored by deterministic metrics. Code: `src/cag_estimate/evals/` (`dataset.py`, `golden_dataset.json`, `metrics.py`, `runner.py`, `run.py`); the JSON ships inside the wheel.
+
+**What they are.** Structural and regression checks: totals add up, counts and hours stay in loose ranges, expected vocabulary appears, guardrails fire with the right reason and without echoing the input, the audience tier matches, and conversation memory stays consistent across turns.
+
+**What they are NOT.** They do not judge whether an estimate is good, and there is no LLM judge: scores from a second model would add cost, variance and a new thing to trust. For that reason `deepeval` is not a dependency. The runner never fakes a result: every turn is a real HTTP request, and a transport error is an errored case, never a pass.
+
+### Run
+
+```bash
+# 1. See the plan and the number of LLM calls. Sends nothing.
+PYTHONPATH=src uv run python -m cag_estimate.evals.run --dry-run
+
+# 2. Run it against the running stack. COST: this calls the real LLM
+#    (one estimate per turn; --mode acb adds up to ACB_MAX_ITERATIONS drafts and reviews per turn).
+PYTHONPATH=src uv run python -m cag_estimate.evals.run --base-url http://localhost:8000 --output report.json
+```
+
+Options: `--mode standard|acb`, `--limit N`, `--case ID` (repeatable), `--output PATH` (JSON report), `--timeout SECONDS`, `--dry-run`. A cost banner is printed before the first request. Exit codes: `0` every case passed every metric, `1` some case failed or errored, `2` usage problem or the API's `/health` is unreachable (nothing was estimated).
+
+### Metrics
+
+| Metric | Checks (final turn unless stated) |
+|--------|-----------------------------------|
+| `schema_consistency` | `total_hours` equals the sum of task hours; `total_cost_usd` equals hours x rate (1 USD tolerance); 3 to 20 tasks; valid complexity; `prompt_version` present |
+| `range_bounds` | task count and total hours inside the case's ranges |
+| `content_recall` | every `expected_in_text` term appears (case-insensitive) in project name, summary, task names and descriptions; at least one `expected_technologies_any_of` appears there or in `project_metadata` |
+| `guardrail_behavior` | expected case: HTTP 400 with exactly that `reason` and no echo of the input; any other case: a 400 is a failure |
+| `tier_expectation` | `resolved_tier` equals `expected_resolved_tier` |
+| `memory_consistency` | only with `check_memory`: every turn is 200, `turns` counts 1, 2, 3..., `project_name` is the same on every turn (case-insensitive), total hours never decrease |
+
+A metric that does not apply to a case reports `n/a` and passes. An errored case fails every metric.
+
+### Add a case
+
+Append an object to `golden_dataset.json`: `id` (3 to 64 characters, unique), `description` (say what regression it guards), `turns` (one or more messages of 20 to 80,000 characters sent in order to ONE session) and any expectations (`hourly_rate`, `tier`, `expect_guardrail_reason`, `expected_in_text`, `expected_technologies_any_of`, `expected_task_count_range`, `expected_hours_range`, `expected_resolved_tier`, `check_memory`). The offline test suite checks that guardrail cases really trigger `check_input` with the declared reason, that tier cases really resolve to their tier with `resolve_tier`, that other cases do not trip a guardrail, and that ranges are sane.
+
+### Limitations
+
+- **Flaky by nature.** The model is not deterministic and the ranges are loose on purpose (they catch regressions, not exact values), so a rare failure may be noise. Re-run before concluding anything; tighten or loosen a range with the evidence.
+- **Tier cases depend on the heuristic.** They test `services/tier_resolver.py` (cue words and rule order); changing the cues can change the expected tier.
+- **Memory rules are strict.** A renamed project or fewer total hours after an additive follow-up fails the case, even if a human might accept it.
+- **Cost and time.** A full run makes about 20 estimate calls; `--mode acb` multiplies that.
+
 ## Web UI (Rails)
 
 A Rails 8 web UI lives in [`../estimator-web/`](../estimator-web/README.md). Its root page is a **conversation** over the session endpoints (`/api/v1/sessions/...`): follow-up messages, file attachments, an audience selector and a memory panel (project, team, technologies, scope, turns), with a "New conversation" button that deletes the session. The original one-shot form (`POST /api/v1/estimate`, not the streaming one) stays at `/estimations/new` as "Single estimate", and successful estimates are kept as History in Postgres. Sessions live in the API process memory, so an API restart ends the conversation and the UI starts a new one. The Streamlit chat above, with its streaming markdown mode, is still available.
