@@ -114,18 +114,13 @@ cag-estimate/
 
 ## ✅ Testing Status
 
-```
-Verification Pipeline: 9/9 tests ✅ PASSING
-├── Schema Validation ✅
-├── Business Logic ✅
-├── Reasonableness Checks ✅
-├── Content Quality ✅
-├── Consistency Validation ✅
-├── Invalid Schema Detection ✅
-├── Calculation Error Detection ✅
-├── Reasonableness Bounds ✅
-└── Complete Validation ✅
-```
+The automated checks run offline (the LLM is faked). Only the evals call the real LLM.
+
+- Python backend: `cd cag-estimate && PYTHONPATH=src uv run pytest -q`
+- Rails UI (needs Docker): `cd cag-estimate && docker compose exec -T estimator-web bin/rails test`
+- Evals against the running API (list the cases first with `--dry-run`): `cd cag-estimate && PYTHONPATH=src uv run python -m cag_estimate.evals.run --dry-run`
+
+See the [verification guide](./cag-estimate/VERIFICATION.md) for the full list.
 
 ## 📋 Files in Repository
 
