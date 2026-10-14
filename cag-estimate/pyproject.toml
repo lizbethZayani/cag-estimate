@@ -35,6 +35,7 @@ dev = [
     "httpx",
     "ruff>=0.5",
     "fakeredis>=2.20",
+    "fpdf2>=2.8.9",
 ]
 
 [tool.ruff]

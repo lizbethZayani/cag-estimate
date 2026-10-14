@@ -222,3 +222,6 @@ __marimo__/
 
 # macOS
 .DS_Store
+
+# Session 6 stress test: generated attachment PDFs
+cag-estimate/session6/stress/fixtures/*.pdf
