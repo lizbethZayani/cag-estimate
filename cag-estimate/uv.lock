@@ -282,6 +282,7 @@ source = { editable = "." }
 dependencies = [
     { name = "anthropic" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "httpx" },
     { name = "instructor" },
     { name = "jinja2" },
     { name = "litellm" },
@@ -305,7 +306,6 @@ dependencies = [
 dev = [
     { name = "fakeredis" },
     { name = "fpdf2" },
-    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -315,6 +315,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", specifier = ">=0.35.0" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.141.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "instructor", specifier = ">=1.5" },
     { name = "jinja2", specifier = ">=3.1" },
     { name = "litellm", specifier = ">=1.50.0" },
@@ -337,7 +338,6 @@ requires-dist = [
 dev = [
     { name = "fakeredis", specifier = ">=2.20" },
     { name = "fpdf2", specifier = ">=2.8.9" },
-    { name = "httpx" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
     { name = "ruff", specifier = ">=0.5" },

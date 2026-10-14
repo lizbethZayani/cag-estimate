@@ -225,3 +225,6 @@ __marimo__/
 
 # Session 6 stress test: generated attachment PDFs
 cag-estimate/session6/stress/fixtures/*.pdf
+# Session 6 stress test: smoke-run CSVs (the real results.csv stays tracked)
+cag-estimate/session6/stress/*smoke*.csv
+cag-estimate/session6/stress/smoke*.csv
