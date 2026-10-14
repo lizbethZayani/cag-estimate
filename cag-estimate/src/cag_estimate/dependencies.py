@@ -24,6 +24,7 @@ from cag_estimate.services.session_compression import (
 )
 from cag_estimate.services.session_estimation import (
     SESSION_PROMPT_VERSION,
+    MeteredLLM,
     SessionEstimationService,
 )
 from cag_estimate.services.sessions import SessionStore
@@ -121,7 +122,8 @@ def build_history_compactor(wrapper: TextCompleter | None = None) -> HistoryComp
 @lru_cache
 def get_session_estimation_service() -> SessionEstimationService:
     """Process-wide session estimation service (no cache: it bypasses both caches)."""
-    wrapper = get_llm_wrapper()
+    # One metered proxy shared by the actor and the summarizer so a turn's cost adds up.
+    wrapper = MeteredLLM(get_llm_wrapper())
     settings = get_settings()
     return SessionEstimationService(
         wrapper,
