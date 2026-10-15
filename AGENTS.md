@@ -6,6 +6,7 @@
 - No business logic or prompt text inside routers; prompts live in versioned Jinja2 templates.
 - Validate LLM output with Pydantic models; never parse JSON with string slicing.
 - Never return raw exception text to API clients; map errors to 400 / 422 / 502.
+  Exception: `POST /embeddings/ingest` returns a generic 500 when the embeddings API fails, as the session 7 exercise brief requires (the response never carries exception text; details go to the logs only).
 - No secrets or API keys in code; read configuration through `Settings`.
 - Use structlog for logging; no `print` in application code.
 - Cache and guardrail failures must fail soft where documented, never crash a request.
