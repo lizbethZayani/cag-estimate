@@ -173,12 +173,20 @@ cag-estimate/
 │   │   ├── schemas/estimation.py        # Request/response models + validators
 │   │   ├── guardrails/                  # input.py, output.py, errors.py
 │   │   ├── cache/semantic.py            # Semantic cache (Redis Stack)
-│   │   └── context/examples.py          # Reference estimation examples
+│   │   ├── context/examples.py          # Reference estimation examples
+│   │   └── embedding_pipeline/          # Session 7: chunk + embed historical budgets
+│   │       ├── schemas.py               # Budget in, Chunk / EmbeddedChunk / IngestResponse out
+│   │       ├── chunker.py               # JSONStructuralChunker (one component = one chunk)
+│   │       ├── embedder.py              # OpenAIEmbedder, cost estimate, cosine_similarity
+│   │       ├── service.py               # EmbeddingIngestService (chunk -> embed -> stats)
+│   │       └── router.py                # POST /embeddings/ingest
 │   └── ui/
 │       ├── streamlit_app.py             # Chat UI (streaming + structured)
 │       ├── estimate_client.py           # HTTP client with safe error messages
 │       └── view_models.py               # Pure presentation helpers
 ├── tests/                               # Offline pytest suite
+├── scripts/compare.py                   # CLI: cosine similarity between two texts
+├── data/                                # Sample budgets (budgets_sample.json, see Embedding pipeline)
 ├── session4/NOTES.md                    # Session 4 changes vs the reference repo
 ├── run_streamlit.sh                     # Launches the chat UI
 ├── Dockerfile                           # API container image
@@ -551,6 +559,129 @@ Append an object to `golden_dataset.json`: `id` (3 to 64 characters, unique), `d
 - **Tier cases depend on the heuristic.** They test `services/tier_resolver.py` (cue words and rule order); changing the cues can change the expected tier.
 - **Memory rules are strict.** A renamed project or fewer total hours after an additive follow-up fails the case, even if a human might accept it.
 - **Cost and time.** A full run makes about 20 estimate calls; `--mode acb` multiplies that.
+
+## Embedding pipeline (session 7 pre-exercise)
+
+A minimal pipeline that chunks historical budgets structurally and embeds each chunk with OpenAI `text-embedding-3-small`. Code: `src/cag_estimate/embedding_pipeline/`.
+
+**What it is.** `POST /embeddings/ingest` takes budgets, builds one chunk per budget component and returns the chunks with their embedding vectors and run stats. `scripts/compare.py` embeds two texts and prints their cosine similarity.
+
+**What it is NOT.** The vectors are returned over HTTP and are **not persisted**. Persistence, retrieval and other chunking strategies come in later sessions.
+
+### How it works
+
+1. `JSONStructuralChunker` makes one chunk per `BudgetComponent`, with no overlap and no splitting. The chunk text starts with a header from the parent budget (project summary, client sector, year, main technology) so a component keeps its context once embedded alone. `chunk_id` is `{budget_id}::{component_id}`; a duplicate id raises an error. `metadata` (budget id, component id, sector, main technology, year, complexity, estimated hours) is returned with the chunk but **not embedded**. `token_count` is measured with tiktoken.
+2. `OpenAIEmbedder` sends the chunk texts in batches of 100. A rate-limit error is retried up to 3 times, waiting 1s, 2s and 4s. Out-of-credit errors (`insufficient_quota` / `credit_balance_exhausted`) are **not** retried, because waiting does not fix them. No `dimensions` is sent, so vectors have the model default of 1536 dimensions.
+3. `stats` come from the chunks' token counts and the constant `EMBEDDING_PRICE_PER_M_TOKENS_USD` (`0.02`, USD per 1M tokens) in `embedder.py`. The price changes over time, so treat `estimated_cost_usd` as an estimate.
+
+| File | Role |
+|------|------|
+| `schemas.py` | Pydantic models: `Budget`, `BudgetComponent`, `Chunk`, `EmbeddedChunk`, `IngestRequest`, `IngestResponse`, `IngestStats` |
+| `chunker.py` | `JSONStructuralChunker`, `TiktokenCounter` |
+| `embedder.py` | `OpenAIEmbedder` (batching, retries), cost estimate, hand-written `cosine_similarity` |
+| `service.py` | `EmbeddingIngestService`: chunk, embed, build stats |
+| `router.py` | `POST /embeddings/ingest` |
+| `scripts/compare.py` | CLI that compares two texts |
+
+### Endpoint: `POST /embeddings/ingest`
+
+The route is `/embeddings/ingest`, **not** under `/api/v1`. Request body: `{"budgets": [...]}` with at least one budget, and each budget needs at least one component. Unknown fields are ignored.
+
+```json
+{
+  "budgets": [
+    {
+      "budget_id": "B-001",
+      "client_metadata": {"name": "Acme Retail", "sector": "retail", "country": "ES"},
+      "project_summary": "Online store with catalog and checkout",
+      "main_technology": "Python",
+      "year": 2024,
+      "total_estimated_hours": 120,
+      "components": [
+        {
+          "component_id": "C-01",
+          "name": "Checkout API",
+          "description": "REST endpoints for cart and payment",
+          "tech_stack": ["FastAPI", "PostgreSQL"],
+          "estimated_hours": 120,
+          "complexity": "medium",
+          "dependencies": []
+        }
+      ]
+    }
+  ]
+}
+```
+
+Response `200`: `{"chunks": [...], "stats": {...}}`. Each chunk has `chunk_id`, `text`, `metadata`, `token_count` and `embedding`. `stats` has `total_budgets`, `total_chunks`, `total_tokens` and `estimated_cost_usd`.
+
+| Status | When |
+|--------|------|
+| `200` | Chunks embedded |
+| `422` | Invalid body (FastAPI validation), e.g. an empty `budgets` list |
+| `500` | The embeddings API failed. Generic body, details only in the logs. This is a documented exception to the 502 rule (see `AGENTS.md`) that follows the exercise brief |
+| `503` | `OPENAI_API_KEY` is not configured |
+
+Try it with curl (save the example body above as `/tmp/budget.json` first):
+
+```bash
+curl -s -X POST http://localhost:8000/embeddings/ingest \
+  -H "Content-Type: application/json" \
+  -d @/tmp/budget.json
+```
+
+It is also in Swagger at **http://localhost:8000/docs** under the `embeddings` tag.
+
+### Compare two texts
+
+`scripts/compare.py` embeds both texts and prints the cosine similarity (computed by hand, no numpy). `scripts/` and `data/` are mounted read-only into the `api` container.
+
+Inside the container (run from the directory with `docker-compose.yml`):
+
+```bash
+docker compose exec api python scripts/compare.py --text-a "Login form with OAuth" --text-b "Sign-in page using Google OAuth"
+```
+
+Outside the container, with a complete `.env` (`OPENAI_API_KEY`, and also `ANTHROPIC_API_KEY` because `Settings` requires it):
+
+```bash
+cd cag-estimate
+PYTHONPATH=src uv run python scripts/compare.py --text-a "Login form with OAuth" --text-b "Sign-in page using Google OAuth"
+```
+
+`PYTHONPATH=src` is there because plain `uv run` can lose the editable install on macOS. Output is three lines: `Text A: ...`, `Text B: ...` and `Cosine similarity: 0.xxxx`. Exit codes: `0` success, `1` the embedding request failed, `2` bad usage (empty text) or no OpenAI key.
+
+### Sample data
+
+`data/budgets_sample.json` (15 historical budgets) is provided by the program and is **not committed by default**. Put it in the project directory at `data/budgets_sample.json`, next to `docker-compose.yml`. The endpoint expects `{"budgets": [...]}`. If the file is a bare list, wrap it and send it:
+
+```bash
+python3 -c 'import json; print(json.dumps({"budgets": json.load(open("data/budgets_sample.json"))}))' > /tmp/ingest_body.json
+curl -s -X POST http://localhost:8000/embeddings/ingest -H "Content-Type: application/json" -d @/tmp/ingest_body.json
+```
+
+If the file already has a top-level `budgets` key, send it directly with `-d @data/budgets_sample.json`.
+
+### Dependencies and tests
+
+After changing dependencies (for example `tiktoken`), rebuild only the API image:
+
+```bash
+docker compose up -d --build --no-deps api
+```
+
+Tests for this module are offline (fake OpenAI client):
+
+```bash
+PYTHONPATH=src uv run pytest -q tests/test_embedding_*.py tests/test_compare_script.py
+```
+
+### Limitations
+
+- Real calls need OpenAI credit; without it OpenAI answers `429` (`insufficient_quota`) and the endpoint returns `500`.
+- tiktoken downloads its encoding file on first use, so the first run needs network access.
+- A chunk above 8191 tokens (the model's input limit) is only logged as a warning, not split.
+- Nothing is stored: every call embeds again and costs tokens.
 
 ## Web UI (Rails)
 
