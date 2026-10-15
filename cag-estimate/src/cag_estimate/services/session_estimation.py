@@ -6,9 +6,11 @@ on the submitted text, so a cache keyed on the text would serve stale or
 wrong-context answers (and would hide the memory behaviour being exercised).
 """
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 
+import structlog
 from pydantic import ValidationError
 
 from cag_estimate.config import get_settings
@@ -17,7 +19,7 @@ from cag_estimate.guardrails.output import enforce_output
 from cag_estimate.prompts import render_estimation_prompt
 from cag_estimate.schemas.acb import ACBSessionResponse, CriticFeedback
 from cag_estimate.schemas.estimation import EstimationRequest, ProjectEstimation
-from cag_estimate.schemas.session import SessionEstimationResponse
+from cag_estimate.schemas.session import SessionEstimationResponse, TurnObservation
 from cag_estimate.services.attachments import ExtractedAttachment, build_combined_transcript
 from cag_estimate.services.boss import Boss
 from cag_estimate.services.critic import Critic, build_estimate_digest
@@ -26,6 +28,8 @@ from cag_estimate.services.metadata_extractor import extract_metadata
 from cag_estimate.services.session_compression import HistoryCompactor
 from cag_estimate.services.sessions import Session
 from cag_estimate.services.tier_resolver import Tier, resolve_tier
+
+log = structlog.get_logger()
 
 # Sessions use the conversational prompt (updated FULL estimate + audience); the
 # non-session /estimate path keeps v1. A constant, not a setting: nothing needs
@@ -48,6 +52,50 @@ def build_history_user_turn(transcript: str, attachments: list[ExtractedAttachme
         return transcript
     names = ", ".join(attachment.filename for attachment in attachments)
     return f"{transcript}\n\n[attachments: {names}]"
+
+
+# Metas of the LLM calls of the turn in progress; None outside a measured turn.
+_turn_metas: ContextVar[list[dict[str, Any]] | None] = ContextVar("turn_metas", default=None)
+
+
+class MeteredLLM:
+    """Proxy that records the meta of every LLM call made while a turn is measured.
+
+    Share one instance between the service and the history compactor so the
+    summarizer call (``complete()``) lands in the same turn as the actor call
+    (``complete_structured()``). Outside a measured turn it only delegates.
+    """
+
+    def __init__(self, wrapper: Any) -> None:
+        self._wrapper = wrapper
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._wrapper, name)
+
+    def complete(self, **kwargs: Any) -> dict[str, Any]:
+        result = self._wrapper.complete(**kwargs)
+        self._record(result)
+        return result
+
+    def complete_structured(self, **kwargs: Any) -> Any:
+        parsed, meta = self._wrapper.complete_structured(**kwargs)
+        self._record(meta)
+        return parsed, meta
+
+    @staticmethod
+    def _record(meta: Any) -> None:
+        metas = _turn_metas.get()
+        if metas is not None and isinstance(meta, dict):
+            metas.append(meta)
+
+
+def _sum_metas(metas: list[dict[str, Any]]) -> tuple[int, int, float, float]:
+    """(tokens_in, tokens_out, cost_usd, latency_ms); metas lacking a field count as 0."""
+    tokens_in = sum((m.get("usage") or {}).get("input_tokens", 0) or 0 for m in metas)
+    tokens_out = sum((m.get("usage") or {}).get("output_tokens", 0) or 0 for m in metas)
+    cost = sum((m.get("cost_breakdown") or {}).get("total_cost_usd", 0.0) or 0.0 for m in metas)
+    latency = sum(m.get("latency_ms", 0.0) or 0.0 for m in metas)
+    return tokens_in, tokens_out, float(cost), float(latency)
 
 
 @dataclass(frozen=True)
@@ -82,11 +130,11 @@ class SessionEstimationService:
         max_iterations: int | None = None,
     ) -> None:
         settings = get_settings()
-        self.wrapper = wrapper
+        self.wrapper = wrapper if isinstance(wrapper, MeteredLLM) else MeteredLLM(wrapper)
         self.moderation_client = moderation_client
         # None restores the plain sliding window: evicted pairs are simply dropped.
         self.compactor = compactor
-        self.critic = critic or Critic(wrapper, settings.critic_model)
+        self.critic = critic or Critic(self.wrapper, settings.critic_model)
         self.boss = Boss(max_iterations or settings.acb_max_iterations)
 
     def estimate(
@@ -106,8 +154,16 @@ class SessionEstimationService:
         """
         with session.lock:
             prepared = self._prepare(session, transcript, attachments, tier)
-            result = self._draft(session, prepared, hourly_rate, None)
-            return self._commit(session, transcript, attachments, prepared, result)
+            metas: list[dict[str, Any]] = []
+            token = _turn_metas.set(metas)
+            try:
+                result = self._draft(session, prepared, hourly_rate, None)
+                response = self._commit(session, transcript, attachments, prepared, result)
+            finally:
+                _turn_metas.reset(token)
+            response.observation = self._observe(session, prepared, attachments, metas)
+            log.info("turn_observed", **response.observation.model_dump())
+            return response
 
     def estimate_with_acb(
         self,
@@ -173,6 +229,30 @@ class SessionEstimationService:
         )
         return enforce_output(result, hourly_rate)
 
+    @staticmethod
+    def _observe(
+        session: Session,
+        prepared: _Prepared,
+        attachments: list[ExtractedAttachment],
+        metas: list[dict[str, Any]],
+    ) -> TurnObservation:
+        tokens_in, tokens_out, cost, latency = _sum_metas(metas)
+        return TurnObservation(
+            turn_index=session.turn_count,
+            session_id=session.session_id,
+            enriched_transcript_chars=len(prepared.combined),
+            attachments_total_chars=sum(len(a.text) for a in attachments),
+            messages_in_window=len(session.history) * 2,
+            anchors_count=len(session.history.anchors),
+            summary_chars=len(session.history.summary or ""),
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=cost,
+            latency_ms=latency,
+            cache_hit_kind="none",
+            last_resolved_tier=str(prepared.tier),
+        )
+
     def _commit(
         self,
         session: Session,
@@ -188,6 +268,7 @@ class SessionEstimationService:
         if self.compactor is not None:
             self.compactor.compact(session.history, evicted)
         session.last_resolved_tier, session.last_tier_rule = prepared.tier, prepared.rule
+        session.turn_count += 1
         return SessionEstimationResponse(
             result=result,
             prompt_version=SESSION_PROMPT_VERSION,

@@ -61,6 +61,8 @@ class SessionSnapshot(SessionCreated):
     message_count: int
     anchors_count: int
     summary_chars: int
+    summary: str
+    anchors: list[str]
     last_tier: str | None
     last_tier_rule: str | None
     created_at: datetime
@@ -108,6 +110,8 @@ def get_session(session_id: str, store: Store) -> SessionSnapshot:
         message_count=turns * 2,
         anchors_count=len(session.history.anchors),
         summary_chars=len(session.history.summary or ""),
+        summary=session.history.summary or "",
+        anchors=[anchor.text for anchor in session.history.anchors],
         last_tier=session.last_resolved_tier,
         last_tier_rule=session.last_tier_rule,
         created_at=session.created_at,

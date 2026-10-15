@@ -140,6 +140,8 @@ class Session:
         # Audience tier of the last successful turn (None before the first one).
         self.last_resolved_tier: Tier | None = None
         self.last_tier_rule: str | None = None
+        # Successful turns so far; unlike len(history) it keeps growing past the window.
+        self.turn_count = 0
         # Held by callers for a whole read-modify-write (e.g. one estimate) so
         # concurrent requests on the same session cannot interleave their turns.
         self.lock = threading.Lock()

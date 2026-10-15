@@ -117,6 +117,8 @@ async def test_snapshot_reports_zero_anchors_and_summary_on_a_fresh_session(
     body = (await client.get(f"/api/v1/sessions/{session_id}")).json()
     assert body["anchors_count"] == 0
     assert body["summary_chars"] == 0
+    assert body["summary"] == ""
+    assert body["anchors"] == []
 
 
 async def test_snapshot_reports_anchors_and_summary_after_the_window_overflows(
@@ -134,6 +136,8 @@ async def test_snapshot_reports_anchors_and_summary_after_the_window_overflows(
     body = (await client.get(f"/api/v1/sessions/{session_id}")).json()
     assert body["anchors_count"] == 1
     assert body["summary_chars"] == len("- plain request")
+    assert body["summary"] == "- plain request"
+    assert body["anchors"] == ["Everything is under NDA"]
 
 
 async def test_delete_session_is_204_then_get_is_404(client: httpx.AsyncClient) -> None:
