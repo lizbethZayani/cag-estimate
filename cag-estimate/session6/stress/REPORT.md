@@ -72,7 +72,27 @@ Per-turn cost goes from $0.016 at depth 1 to $0.168 at depth 15 (10.4x); latency
 
 **What would justify RAG, and the limits of this data.** The dominant dimension is cost and latency growing with history depth and with retries, not recall. A realistic trigger for RAG is a project that needs more than the 80,000 characters the CAG accepts (the 100 KB PDF is refused outright) or a session that must stay under a latency SLA: at 100k+ tokens per turn the mean latency is 183 s. Caveats before drawing conclusions: one repeat per cell; the fact tracker only follows the turn-1 project name, so the pivot (React -> Flutter) and the contradiction (30k -> 80k EUR) were exercised but not measured; anchors stayed at 0 because the heuristic detector never fired on these transcripts; and the summarizer holds 540 chars by depth 15, so any loss of detail there is not captured by an exact-substring metric. The visible spend ($4.61) excludes failed retries, which are billed but log no cost row, so real spend is higher.
 
-## 4. Design notes
+## 4. Conclusions
+
+1. **This kind of test is expensive.** One 20-turn session of the CAG costs about $1.4-$1.6 in visible spend and roughly 20-30 minutes of LLM time (P50 turn latency x successful turns), because each turn gets slower and dearer as the history grows (section 2). The three scenarios alone cost $4.61. Estimate, not measured: the guide's default matrix (3 scenarios x 5 attachment sizes x 3 repeats = 45 sessions) would be roughly 45 x $1.5, i.e. more than $65, so it was not run; this report uses a reduced matrix with 1 repeat.
+2. **The LLM starts to fail as the conversation grows.** 1 of 18 turns failed in turns 1-6 (6%); 11 of 42 failed in turns 7-20 (26%; 10 HTTP 502s and 1 client read timeout). Every one of the 502s is Instructor exhausting its retries because the model's estimate broke a validator, and each failed turn is still billed. Failures are not random noise to average away: they are concentrated where context is largest, which is also where each attempt is most expensive.
+3. **A stress test can fail for reasons unrelated to the system under test.** The first full attempt ended when the Anthropic account ran out of credits (608 "credit balance is too low" errors), which produced 156 error rows that say nothing about the CAG. Those rows are excluded from `results.csv`. A spend cap and a consecutive-error breaker should be part of the runner, not an afterthought.
+
+## 5. Cost of this exercise
+
+Visible spend is the sum of `cost_usd` over successful turns, measured from the CSV files. The real bill is higher, because turns that ended in a 502 consumed tokens but logged no cost.
+
+| Run | Turns | Successful | Visible spend |
+|---|--:|--:|--:|
+| Smoke test (`growing`, 8 turns) | 8 | 8 | $0.23 |
+| First full attempt (stopped by exhausted credits, rows not used) | 180 | 24 | $1.64 |
+| Final run (`results.csv`: scenarios + attachment sweep) | 68 | 54 | $4.61 |
+| **Total visible** | **256** | **86** | **$6.48** |
+
+- **Not visible:** the retries behind the 12 validator-exhaustion failures in the final run, and an unknown number in the first attempt before credits ran out, are billed but not in the CSV. (The credit-balance failures were rejected by the API and not billed.) The amount actually billed is in the Anthropic console; treat $6.48 as a lower bound.
+- **Budget set for the task:** $10. A guard stopped the final run if visible spend passed $6 or 5 turns failed in a row; it never triggered.
+
+## 6. Design notes
 
 - **Where the metrics live:** `LatencyBudgetMetric`, `CostBudgetMetric` and `MemoryDriftMetric` are in `src/cag_estimate/evals/stress/metrics.py`, not `evals/metrics.py`, because they consume the turn observation and the session snapshot, not a final estimate. They reuse `MetricResult`.
 - **How the observation reaches the runner:** `turn_observed` is logged and also returned as `observation` in the `/estimate` response; the snapshot (`GET /sessions/{id}`) exposes summary and anchor text. This keeps the runner HTTP-only, with no log parsing.
