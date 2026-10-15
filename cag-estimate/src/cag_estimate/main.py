@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from cag_estimate.config import get_settings
+from cag_estimate.embedding_pipeline.router import router as embeddings_router
 from cag_estimate.logging_config import configure_logging
 from cag_estimate.routers import estimations, sessions
 
@@ -58,6 +59,7 @@ app.add_middleware(
 # Include routers
 app.include_router(estimations.router)
 app.include_router(sessions.router)
+app.include_router(embeddings_router)
 
 
 @app.get("/health", response_model=HealthStatus, status_code=200)
