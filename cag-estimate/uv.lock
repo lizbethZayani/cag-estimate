@@ -299,6 +299,7 @@ dependencies = [
     { name = "requests" },
     { name = "streamlit" },
     { name = "structlog" },
+    { name = "tiktoken" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -331,6 +332,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.31.0" },
     { name = "streamlit", specifier = ">=1.28.0" },
     { name = "structlog", specifier = ">=24.1.0" },
+    { name = "tiktoken", specifier = ">=0.7.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.53.0" },
 ]
 
