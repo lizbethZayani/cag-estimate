@@ -1,0 +1,69 @@
+turn_index,session_id,enriched_transcript_chars,attachments_total_chars,messages_in_window,anchors_count,summary_chars,tokens_in,tokens_out,cost_usd,latency_ms,cache_hit_kind,last_resolved_tier,scenario,attachment_size_kb,repeat,wall_clock_ms,status_code,latency_budget_passed,cost_budget_passed,memory_drift_passed,tracked_fact,error
+1,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,102,0,2,0,0,5214,2143,0.015929,19219.0,none,default,growing,0,1,19869.1,200,False,True,True,Nimbus,
+2,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,,,,,,,,,,,,growing,0,1,61564.6,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+2,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,71,0,4,0,0,15434,3385,0.032359,30182.5,none,default,growing,0,1,30547.5,200,False,False,True,Nimbus,
+3,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,63,0,6,0,0,8455,1918,0.018045,18111.5,none,pm,growing,0,1,19297.6,200,False,True,True,Nimbus,
+4,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,74,0,8,0,0,23283,4723,0.046898,46638.9,none,default,growing,0,1,47046.9,200,False,False,True,Nimbus,
+5,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,81,0,10,0,0,28877,7226,0.065007,68642.2,none,default,growing,0,1,69019.6,200,False,False,True,Nimbus,
+6,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,60,0,12,0,0,34741,6743,0.068456,66792.4,none,default,growing,0,1,67208.5,200,False,False,True,Nimbus,
+7,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,72,0,12,0,136,60794,7201,0.096799,72220.5,none,default,growing,0,1,72715.5,200,False,False,True,Nimbus,
+9,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,,,,,,,,,,,,growing,0,1,98324.2,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+8,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,56,0,12,0,189,62430,7571,0.100285,75761.70000000001,none,default,growing,0,1,76276.0,200,False,False,True,Nimbus,
+11,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,,,,,,,,,,,,growing,0,1,108555.2,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+9,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,47,0,12,0,240,65291,8977,0.110176,86863.5,none,default,growing,0,1,87582.3,200,False,False,True,Nimbus,
+10,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,73,0,12,0,264,92105,10459,0.1444,119889.3,none,default,growing,0,1,120311.8,200,False,False,True,Nimbus,
+11,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,68,0,12,0,337,95917,10712,0.149477,106819.90000000001,none,developer,growing,0,1,107550.6,200,False,False,True,Nimbus,
+12,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,70,0,12,0,384,38901,4892,0.063361,43279.2,none,default,growing,0,1,44226.7,200,False,False,True,Nimbus,
+13,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,64,0,12,0,414,89859,10124,0.14047900000000002,96129.9,none,default,growing,0,1,97248.0,200,False,False,True,Nimbus,
+14,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,60,0,12,0,471,63239,7534,0.100909,71636.7,none,default,growing,0,1,72313.5,200,False,False,True,Nimbus,
+15,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,72,0,12,0,515,89761,10871,0.144116,99978.6,none,default,growing,0,1,100564.3,200,False,False,True,Nimbus,
+16,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,64,0,12,0,579,61035,6948,0.095775,63329.9,none,developer,growing,0,1,63958.6,200,False,False,True,Nimbus,
+17,f663dc58-0a58-46b4-8782-5c7cdbc00eaa,70,0,12,0,633,85527,9912,0.135087,90464.79999999999,none,developer,growing,0,1,90853.2,200,False,False,True,Nimbus,
+1,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,102,0,2,0,0,5214,2139,0.015909,18903.3,none,default,pivot,0,1,19355.3,200,False,True,True,Nimbus,
+2,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,79,0,4,0,0,6765,2608,0.019805,26145.1,none,developer,pivot,0,1,26708.1,200,False,True,True,Nimbus,
+3,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,71,0,6,0,0,9337,2886,0.023767,29226.2,none,developer,pivot,0,1,29788.1,200,False,False,True,Nimbus,
+4,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,63,0,8,0,0,28174,6599,0.061169,66808.0,none,pm,pivot,0,1,68470.8,200,False,False,True,Nimbus,
+5,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,108,0,10,0,0,35518,10075,0.085893,102869.2,none,developer,pivot,0,1,103340.3,200,False,False,True,Nimbus,
+6,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,81,0,12,0,0,41850,8911,0.086405,108882.4,none,developer,pivot,0,1,109289.0,200,False,False,True,Nimbus,
+7,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,,,,,,,,,,,,pivot,0,1,191155.7,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+7,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,72,0,12,0,160,51517,8996,0.096497,104794.1,none,developer,pivot,0,1,105317.9,200,False,False,True,Nimbus,
+8,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,61,0,12,0,224,128440,15403,0.205455,170259.09999999998,none,developer,pivot,0,1,170651.5,200,False,False,True,Nimbus,
+9,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,56,0,12,0,287,53271,6259,0.084566,69131.8,none,developer,pivot,0,1,69690.9,200,False,False,True,Nimbus,
+11,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,,,,,,,,,,,,pivot,0,1,195047.8,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+12,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,,,,,,,,,,,,pivot,0,1,186643.6,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+10,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,73,0,12,0,351,87800,10472,0.14015999999999998,122152.4,none,developer,pivot,0,1,122815.0,200,False,False,True,Nimbus,
+14,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,,,,,,,,,,,,pivot,0,1,115799.5,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+15,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,,,,,,,,,,,,pivot,0,1,137878.5,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+11,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,64,0,12,0,369,52879,6545,0.085604,71540.40000000001,none,developer,pivot,0,1,72039.4,200,False,False,True,Nimbus,
+12,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,60,0,12,0,423,85172,11597,0.14315699999999998,134667.7,none,developer,pivot,0,1,135187.5,200,False,False,True,Nimbus,
+13,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,72,0,12,0,448,125142,17302,0.211652,198655.1,none,developer,pivot,0,1,199843.8,200,False,False,True,Nimbus,
+14,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,64,0,12,0,520,84810,12274,0.14618,143585.1,none,developer,pivot,0,1,144322.0,200,False,False,True,Nimbus,
+15,f1fe5f62-e853-49ef-8114-7d5a1d48e40f,70,0,12,0,567,88284,13913,0.157849,164846.9,none,developer,pivot,0,1,165476.0,200,False,False,True,Nimbus,
+1,eccfd980-455d-4fda-a824-099591c04ef4,102,0,2,0,0,5214,2264,0.016534,19851.7,none,default,contradiction,0,1,20316.4,200,False,True,True,Nimbus,
+2,eccfd980-455d-4fda-a824-099591c04ef4,79,0,4,0,0,15787,3852,0.035047,36755.0,none,developer,contradiction,0,1,37239.7,200,False,False,True,Nimbus,
+3,eccfd980-455d-4fda-a824-099591c04ef4,73,0,6,0,0,19490,4314,0.04106,38302.9,none,developer,contradiction,0,1,38917.7,200,False,False,True,Nimbus,
+4,eccfd980-455d-4fda-a824-099591c04ef4,63,0,8,0,0,10528,3311,0.027083,28301.0,none,pm,contradiction,0,1,28698.1,200,False,False,True,Nimbus,
+5,eccfd980-455d-4fda-a824-099591c04ef4,74,0,10,0,0,12777,2771,0.026632,28224.3,none,developer,contradiction,0,1,29137.2,200,False,False,True,Nimbus,
+6,eccfd980-455d-4fda-a824-099591c04ef4,81,0,12,0,0,35227,6718,0.068817,68834.2,none,developer,contradiction,0,1,69382.8,200,False,False,True,Nimbus,
+7,eccfd980-455d-4fda-a824-099591c04ef4,60,0,12,0,156,18642,3150,0.034392,34289.5,none,developer,contradiction,0,1,34662.3,200,False,False,True,Nimbus,
+8,eccfd980-455d-4fda-a824-099591c04ef4,73,0,12,0,215,20328,3207,0.036363,34960.9,none,developer,contradiction,0,1,35511.6,200,False,False,True,Nimbus,
+9,eccfd980-455d-4fda-a824-099591c04ef4,61,0,12,0,262,47265,7197,0.08324999999999999,82022.2,none,developer,contradiction,0,1,82461.9,200,False,False,True,Nimbus,
+10,eccfd980-455d-4fda-a824-099591c04ef4,56,0,12,0,315,22603,4741,0.046308,51847.2,none,developer,contradiction,0,1,53453.7,200,False,False,True,Nimbus,
+11,eccfd980-455d-4fda-a824-099591c04ef4,52,0,12,0,368,85953,14100,0.156453,171651.2,none,developer,contradiction,0,1,172068.5,200,False,False,True,Nimbus,
+12,eccfd980-455d-4fda-a824-099591c04ef4,,,,,,,,,,,,contradiction,0,1,300004.2,,,,,Nimbus,ReadTimeout: timed out
+13,eccfd980-455d-4fda-a824-099591c04ef4,,,,,,,,,,,,contradiction,0,1,265222.7,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+12,eccfd980-455d-4fda-a824-099591c04ef4,68,0,12,0,435,129117,16582,0.212027,198290.90000000002,none,developer,contradiction,0,1,198924.8,200,False,False,True,Nimbus,
+13,eccfd980-455d-4fda-a824-099591c04ef4,70,0,12,0,482,90532,12466,0.152862,149328.5,none,developer,contradiction,0,1,150389.1,200,False,False,True,Nimbus,
+14,eccfd980-455d-4fda-a824-099591c04ef4,64,0,12,0,494,131563,15755,0.210338,183835.7,none,developer,contradiction,0,1,184997.0,200,False,False,True,Nimbus,
+17,eccfd980-455d-4fda-a824-099591c04ef4,,,,,,,,,,,,contradiction,0,1,193784.4,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+18,eccfd980-455d-4fda-a824-099591c04ef4,,,,,,,,,,,,contradiction,0,1,157766.5,502,,,,Nimbus,"HTTP 502: {""detail"":""The estimation service is temporarily unavailable. Please try again.""}"
+15,eccfd980-455d-4fda-a824-099591c04ef4,64,0,12,0,538,126576,14877,0.200961,164298.5,none,developer,contradiction,0,1,165083.0,200,False,False,True,Nimbus,
+16,eccfd980-455d-4fda-a824-099591c04ef4,70,0,12,0,591,26066,2090,0.036516,24973.899999999998,none,developer,contradiction,0,1,25531.9,200,False,False,True,Nimbus,
+1,6c203ff0-a510-44f9-b318-acc5dcd20a73,5139,5000,2,0,0,5879,2688,0.019319,23647.3,none,pm,growing,5,1,25679.3,200,False,True,True,Nimbus,
+2,6c203ff0-a510-44f9-b318-acc5dcd20a73,5116,5000,4,0,0,7831,2109,0.018376,22109.0,none,pm,growing,5,1,23139.3,200,False,True,True,Nimbus,
+1,e12af325-0e96-43c9-9171-2a2d51273d09,20139,19999,2,0,0,7841,2645,0.021066,23694.8,none,pm,growing,20,1,24369.9,200,False,False,True,Nimbus,
+2,e12af325-0e96-43c9-9171-2a2d51273d09,20116,19999,4,0,0,9699,2072,0.020059,22383.0,none,pm,growing,20,1,22913.8,200,False,False,True,Nimbus,
+1,167215dd-c158-4878-bec1-6676a4a159bf,50140,50000,2,0,0,11709,2755,0.025484,25100.5,none,pm,growing,50,1,25622.1,200,False,False,True,Nimbus,
+2,167215dd-c158-4878-bec1-6676a4a159bf,50117,50000,4,0,0,13716,3220,0.029816,30703.4,none,pm,growing,50,1,31273.7,200,False,False,True,Nimbus,
+1,47f8bb90-236a-4158-9a37-e256eb73296d,,,,,,,,,,,,growing,100,1,95.8,413,,,,Nimbus,"HTTP 413: {""detail"":""An attachment or the combined text exceeds the allowed size.""}"
+2,47f8bb90-236a-4158-9a37-e256eb73296d,,,,,,,,,,,,growing,100,1,94.5,413,,,,Nimbus,"HTTP 413: {""detail"":""An attachment or the combined text exceeds the allowed size.""}"
