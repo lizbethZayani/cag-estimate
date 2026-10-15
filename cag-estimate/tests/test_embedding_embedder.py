@@ -159,6 +159,45 @@ def test_insufficient_quota_propagates_immediately(error: openai.RateLimitError)
     assert len(h.embeddings.calls) == 1
 
 
+def _error_with(body: dict[str, Any]) -> openai.RateLimitError:
+    return openai.RateLimitError("no credit", response=_response(429), body=body)
+
+
+NO_CREDIT_INNER = {
+    "message": "You have no credits remaining.",
+    "type": "insufficient_quota",
+    "param": None,
+    "code": "credit_balance_exhausted",
+}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        NO_CREDIT_INNER,
+        {"error": NO_CREDIT_INNER},
+        {"message": "x", "type": "insufficient_quota", "code": None},
+        {"message": "x", "type": "requests", "code": "credit_balance_exhausted"},
+        {"error": {"message": "x", "type": "insufficient_quota"}},
+        {"error": {"message": "x", "code": "credit_balance_exhausted"}},
+    ],
+)
+def test_credit_errors_are_not_retried(body: dict[str, Any]) -> None:
+    h = Harness(failures=[_error_with(body)])
+    with pytest.raises(openai.RateLimitError):
+        h.embedder.embed_many(make_chunks(1))
+    assert h.sleeps == []
+    assert len(h.embeddings.calls) == 1
+
+
+def test_ordinary_429_with_requests_type_still_retries() -> None:
+    body = {"message": "slow down", "type": "requests", "code": "rate_limit_exceeded"}
+    h = Harness(failures=[_error_with(body) for _ in range(4)])
+    with pytest.raises(openai.RateLimitError):
+        h.embedder.embed_many(make_chunks(1))
+    assert h.sleeps == [1, 2, 4]
+
+
 @pytest.mark.parametrize("error", [auth_error(), RuntimeError("boom")])
 def test_other_errors_propagate_without_retry(error: Exception) -> None:
     h = Harness(failures=[error])

@@ -17,27 +17,33 @@ from cag_estimate.embedding_pipeline.schemas import Chunk, EmbeddedChunk, Ingest
 # Current price of text-embedding-3-small in USD per 1M tokens; it changes over time.
 EMBEDDING_PRICE_PER_M_TOKENS_USD = 0.02
 COST_DECIMALS = 8
-INSUFFICIENT_QUOTA = "insufficient_quota"
+# Error types/codes of a 429 that means "no credit": waiting never fixes it.
+OUT_OF_CREDIT_MARKERS = frozenset({"insufficient_quota", "credit_balance_exhausted"})
 
 log = structlog.get_logger()
 
 
-def _error_code(exc: openai.APIError) -> str | None:
-    """Error code of an API error, read from the attribute or the raw body."""
-    code = getattr(exc, "code", None)
-    if code is None and isinstance(exc.body, dict):
-        error = exc.body.get("error")
-        code = error.get("code") if isinstance(error, dict) else None
-    return code
+def _is_out_of_credit(exc: openai.APIError) -> bool:
+    """True when the error ``type`` or ``code`` says the account has no credit left.
+
+    Both fields are read from the SDK attributes and from the raw body, flat or
+    nested under ``error``, because the payload shape varies.
+    """
+    body = exc.body if isinstance(exc.body, dict) else {}
+    nested = body.get("error")
+    sources = [body, nested if isinstance(nested, dict) else {}]
+    values = {getattr(exc, "code", None), getattr(exc, "type", None)}
+    values.update(source.get(field) for source in sources for field in ("type", "code"))
+    return not values.isdisjoint(OUT_OF_CREDIT_MARKERS)
 
 
 class OpenAIEmbedder:
     """Embeds chunks through an OpenAI client, ``batch_size`` chunks per request.
 
     A ``RateLimitError`` is retried up to ``max_retries`` times, waiting 1s, 2s, 4s...
-    before giving up with the last error. The one exception is ``insufficient_quota``
-    (the account has no credit): retrying never helps, so it propagates immediately
-    without waiting. Every other exception propagates unchanged.
+    before giving up with the last error. The one exception is an out-of-credit error
+    (type or code ``insufficient_quota`` / ``credit_balance_exhausted``): retrying
+    never helps, so it propagates immediately without waiting. Every other exception propagates unchanged.
     """
 
     def __init__(
@@ -94,7 +100,7 @@ class OpenAIEmbedder:
             try:
                 return self._client.embeddings.create(model=self._model, input=texts)
             except openai.RateLimitError as exc:
-                if _error_code(exc) == INSUFFICIENT_QUOTA or attempt >= self._max_retries:
+                if _is_out_of_credit(exc) or attempt >= self._max_retries:
                     log.warning("embedding_failed", error_type=type(exc).__name__)
                     raise
                 wait_seconds = 2**attempt
