@@ -65,6 +65,9 @@ services:
       - ./src:/app/src:ro
       # Mount tests for verification
       - ./tests:/app/tests:ro
+      # Used by scripts/compare.py and the sample data
+      - ./scripts:/app/scripts:ro
+      - ./data:/app/data:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

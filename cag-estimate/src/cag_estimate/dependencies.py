@@ -10,6 +10,9 @@ from openai import OpenAI
 from cag_estimate.cache.semantic import EstimationSemanticCache
 from cag_estimate.cache.vectorizer import LazyOpenAIVectorizer
 from cag_estimate.config import get_settings
+from cag_estimate.embedding_pipeline.chunker import JSONStructuralChunker
+from cag_estimate.embedding_pipeline.embedder import OpenAIEmbedder
+from cag_estimate.embedding_pipeline.service import EmbeddingIngestService
 from cag_estimate.prompts import render_system_prompt
 from cag_estimate.services.cache import get_cache
 from cag_estimate.services.critic import Critic
@@ -42,6 +45,31 @@ def build_moderation_client() -> Any | None:
     except Exception as exc:  # noqa: BLE001 - moderation is optional, fail soft
         log.warning("moderation_client_unavailable", error_type=type(exc).__name__)
         return None
+
+
+def build_embedding_service() -> EmbeddingIngestService | None:
+    """Ingest service, or None when no OpenAI key is set.
+
+    The client disables the SDK's own retries (``max_retries=0``) so the retry policy
+    of ``OpenAIEmbedder`` is the only one and waits are not multiplied.
+    """
+    settings = get_settings()
+    if not settings.openai_api_key:
+        log.warning("embedding_service_unavailable", reason="no_openai_key")
+        return None
+    try:
+        client = OpenAI(api_key=settings.openai_api_key, max_retries=0)
+    except Exception as exc:  # noqa: BLE001 - the endpoint answers 503, fail soft
+        log.warning("embedding_service_unavailable", error_type=type(exc).__name__)
+        return None
+    embedder = OpenAIEmbedder(client, model=settings.embedding_model)
+    return EmbeddingIngestService(JSONStructuralChunker(), embedder)
+
+
+@lru_cache
+def get_embedding_service() -> EmbeddingIngestService | None:
+    """Process-wide ingest service (None when not configured)."""
+    return build_embedding_service()
 
 
 def build_semantic_cache() -> EstimationSemanticCache | None:
