@@ -3,18 +3,23 @@
 Unknown fields in the input are ignored so a richer budget file still loads.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 NonEmptyStr = Field(min_length=1)
+
+Sector = Literal["finance", "ecommerce", "healthcare", "industrial"]
+Complexity = Literal["low", "medium", "high"]
+MIN_YEAR = 2000
+MAX_YEAR = 2100
 
 
 class ClientMetadata(BaseModel):
     """Who the budget was written for."""
 
     name: str = NonEmptyStr
-    sector: str = NonEmptyStr
+    sector: Sector
     country: str = NonEmptyStr
 
 
@@ -26,7 +31,7 @@ class BudgetComponent(BaseModel):
     description: str = NonEmptyStr
     tech_stack: list[str] = Field(default_factory=list)
     estimated_hours: int | float = Field(ge=0)
-    complexity: str = NonEmptyStr
+    complexity: Complexity
     dependencies: list[str] = Field(default_factory=list)
 
 
@@ -37,7 +42,7 @@ class Budget(BaseModel):
     client_metadata: ClientMetadata
     project_summary: str = NonEmptyStr
     main_technology: str = NonEmptyStr
-    year: int
+    year: int = Field(ge=MIN_YEAR, le=MAX_YEAR)
     total_estimated_hours: int | float = Field(ge=0)
     components: list[BudgetComponent]
 

@@ -17,10 +17,12 @@ from cag_estimate.embedding_pipeline.schemas import (
     BudgetComponent,
     Chunk,
     ClientMetadata,
+    Complexity,
     EmbeddedChunk,
     IngestRequest,
     IngestResponse,
     IngestStats,
+    Sector,
 )
 
 __all__ = [
@@ -29,12 +31,14 @@ __all__ = [
     "BudgetComponent",
     "Chunk",
     "ClientMetadata",
+    "Complexity",
     "EmbeddedChunk",
     "IngestRequest",
     "IngestResponse",
     "IngestStats",
     "JSONStructuralChunker",
     "OpenAIEmbedder",
+    "Sector",
     "TiktokenCounter",
     "TokenCounter",
     "build_ingest_stats",

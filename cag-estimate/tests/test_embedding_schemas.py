@@ -85,6 +85,33 @@ def test_empty_sector_is_rejected():
         Budget.model_validate(payload)
 
 
+def test_unknown_sector_is_rejected():
+    payload = budget_payload()
+    payload["client_metadata"]["sector"] = "retail"
+
+    with pytest.raises(ValidationError, match="sector"):
+        Budget.model_validate(payload)
+
+
+def test_unknown_complexity_is_rejected():
+    payload = budget_payload()
+    payload["components"][0]["complexity"] = "extreme"
+
+    with pytest.raises(ValidationError, match="complexity"):
+        Budget.model_validate(payload)
+
+
+@pytest.mark.parametrize("year", [1999, 2101])
+def test_year_outside_bounds_is_rejected(year):
+    with pytest.raises(ValidationError, match="year"):
+        Budget.model_validate(budget_payload(year=year))
+
+
+@pytest.mark.parametrize("year", [2000, 2100])
+def test_year_on_the_bounds_is_accepted(year):
+    assert Budget.model_validate(budget_payload(year=year)).year == year
+
+
 def test_budget_without_components_is_rejected():
     with pytest.raises(ValidationError, match="at least one component"):
         Budget.model_validate(budget_payload(components=[]))
