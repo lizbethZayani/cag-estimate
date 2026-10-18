@@ -653,14 +653,14 @@ PYTHONPATH=src uv run python scripts/compare.py --text-a "Login form with OAuth"
 
 ### Sample data
 
-`data/budgets_sample.json` (15 historical budgets) is provided by the program and is **not committed by default**. Put it in the project directory at `data/budgets_sample.json`, next to `docker-compose.yml`. The endpoint expects `{"budgets": [...]}`. If the file is a bare list, wrap it and send it:
+`data/budgets_sample.json` (15 historical budgets, 52 components) is committed in the project directory, next to `docker-compose.yml` (it is mounted read-only into the `api` container). The endpoint expects `{"budgets": [...]}`, and the file is a bare list, so wrap it and send it:
 
 ```bash
 python3 -c 'import json; print(json.dumps({"budgets": json.load(open("data/budgets_sample.json"))}))' > /tmp/ingest_body.json
 curl -s -X POST http://localhost:8000/embeddings/ingest -H "Content-Type: application/json" -d @/tmp/ingest_body.json
 ```
 
-If the file already has a top-level `budgets` key, send it directly with `-d @data/budgets_sample.json`.
+Measured result with this file (real OpenAI call, 2026-10-18): HTTP 200, 15 budgets, **52 chunks** (one per component, 52 unique ids), 1536-dimension vectors, **4,126 tokens**, estimated cost **$0.0000825**. The three-pair similarity check is in [`SANITY_CHECK.md`](src/cag_estimate/embedding_pipeline/SANITY_CHECK.md).
 
 ### Dependencies and tests
 
