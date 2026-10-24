@@ -1,38 +1,18 @@
 """Live tests against the compose pgvector container (never the production database)."""
 
-import asyncio
 import math
-import os
-from collections.abc import AsyncIterator, Iterator
-from pathlib import Path
 
-import asyncpg
 import pytest
 from alembic.config import Config
 from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from alembic import command
-from cag_estimate.config import get_settings
 from cag_estimate.db.models import EMBEDDING_DIMENSIONS, ChunkRow, DocumentRow
 from cag_estimate.embedding_pipeline.repository import ChunkStore
 from cag_estimate.embedding_pipeline.schemas import EmbeddedChunk
+from tests.integration.conftest import ALEMBIC_INI, SessionFactory, scalar
 
 pytestmark = pytest.mark.integration
-
-TEST_DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgresql+asyncpg://estimator:estimator@localhost:5433/estimator_test"
-)
-ALEMBIC_INI = Path(__file__).resolve().parents[2] / "alembic.ini"
-CONNECT_TIMEOUT_SECONDS = 2
-SessionFactory = async_sessionmaker[AsyncSession]
-
-
-async def probe_database() -> None:
-    connection = await asyncpg.connect(
-        TEST_DATABASE_URL.replace("+asyncpg", ""), timeout=CONNECT_TIMEOUT_SECONDS
-    )
-    await connection.close()
 
 
 def vector(*head: float) -> list[float]:
@@ -55,34 +35,6 @@ def cosine_distance(a: list[float], b: list[float]) -> float:
     return 1 - dot / (math.hypot(*a) * math.hypot(*b))
 
 
-@pytest.fixture(scope="module")
-def migrated_database() -> Iterator[str]:
-    try:
-        asyncio.run(probe_database())
-    except (OSError, asyncpg.PostgresError, TimeoutError) as error:
-        pytest.skip(f"pgvector test database not reachable at {TEST_DATABASE_URL}: {error}")
-
-    patch = pytest.MonkeyPatch()
-    patch.setenv("DATABASE_URL", TEST_DATABASE_URL)
-    patch.setenv("ANTHROPIC_API_KEY", os.environ.get("ANTHROPIC_API_KEY", "test-key"))
-    get_settings.cache_clear()
-    config = Config(str(ALEMBIC_INI))
-    command.downgrade(config, "base")
-    command.upgrade(config, "head")
-    yield TEST_DATABASE_URL
-    patch.undo()
-    get_settings.cache_clear()
-
-
-@pytest.fixture
-async def session_factory(migrated_database: str) -> AsyncIterator[SessionFactory]:
-    engine = create_async_engine(migrated_database)
-    async with engine.begin() as connection:
-        await connection.execute(text("TRUNCATE documents RESTART IDENTITY CASCADE"))
-    yield async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
-    await engine.dispose()
-
-
 async def seed(factory: SessionFactory, chunks: list[EmbeddedChunk]) -> int:
     async with factory() as session, session.begin():
         document_id = await ChunkStore.add_document(
@@ -92,11 +44,6 @@ async def seed(factory: SessionFactory, chunks: list[EmbeddedChunk]) -> int:
             session, document_id=document_id, chunks=chunks, chunk_type="component"
         )
     return document_id
-
-
-async def scalar(factory: SessionFactory, sql: str) -> object:
-    async with factory() as session:
-        return await session.scalar(text(sql))
 
 
 def test_models_match_the_migration(migrated_database: str) -> None:
@@ -137,7 +84,7 @@ async def test_deleting_a_document_removes_its_chunks(session_factory: SessionFa
     assert await scalar(session_factory, "SELECT count(*) FROM chunks") == 1
 
     async with session_factory() as session, session.begin():
-        await session.execute(text(f"DELETE FROM documents WHERE id = {document_id}"))
+        await session.execute(text("DELETE FROM documents WHERE id = :id"), {"id": document_id})
 
     assert await scalar(session_factory, "SELECT count(*) FROM chunks") == 0
 
