@@ -56,6 +56,8 @@ class Settings(BaseSettings):
     acb_max_iterations: int = 2
     # Model for the critic calls (use a cheap one); None = the router's primary model.
     critic_model: str | None = None
+    # SQLAlchemy async URL (env DATABASE_URL), e.g. postgresql+asyncpg://user:pass@host:5432/db
+    database_url: str | None = None
     app_env: str = "development"
     log_level: str = "DEBUG"
 
