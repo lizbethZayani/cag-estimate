@@ -11,7 +11,6 @@ from cag_estimate.embedding_pipeline.schemas import (
     EmbeddedChunk,
     IngestRequest,
     IngestResponse,
-    IngestStats,
 )
 
 
@@ -135,15 +134,46 @@ def test_extra_fields_are_ignored():
     assert not hasattr(budget.components[0], "owner")
 
 
-def test_ingest_request_needs_at_least_one_budget():
-    with pytest.raises(ValidationError, match="at least one budget"):
-        IngestRequest(budgets=[])
+def ingest_payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "source_path": "data/budgets/budget_2024_q1_fintech.json",
+        "document_type": "historical_budget",
+        "content": budget_payload(),
+    }
+    payload.update(overrides)
+    return payload
 
 
-def test_ingest_request_accepts_budgets():
-    request = IngestRequest.model_validate({"budgets": [budget_payload()]})
+def test_ingest_request_accepts_one_budget():
+    request = IngestRequest.model_validate(ingest_payload())
 
-    assert len(request.budgets) == 1
+    assert request.source_path == "data/budgets/budget_2024_q1_fintech.json"
+    assert request.document_type == "historical_budget"
+    assert request.content.budget_id == "BUD-2024-014"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"source_path": ""},
+        {"document_type": ""},
+        {"document_type": "x" * 51},
+        {"content": budget_payload(components=[])},
+        {"content": [budget_payload()]},
+    ],
+)
+def test_invalid_ingest_requests_are_rejected(overrides):
+    with pytest.raises(ValidationError):
+        IngestRequest.model_validate(ingest_payload(**overrides))
+
+
+@pytest.mark.parametrize("missing", ["source_path", "document_type", "content"])
+def test_ingest_request_requires_every_field(missing):
+    payload = ingest_payload()
+    del payload[missing]
+
+    with pytest.raises(ValidationError, match=missing):
+        IngestRequest.model_validate(payload)
 
 
 def test_negative_token_count_is_rejected():
@@ -160,13 +190,28 @@ def test_embedded_chunk_carries_the_embedding():
     assert isinstance(chunk, Chunk)
 
 
-def test_ingest_response_wraps_chunks_and_stats():
-    chunk = EmbeddedChunk(chunk_id="A::B", text="t", metadata={}, token_count=3, embedding=[0.1])
-    stats = IngestStats(
-        total_budgets=1, total_chunks=1, total_tokens=3, estimated_cost_usd=0.00000006
+def test_ingest_response_has_the_documented_fields():
+    response = IngestResponse(
+        document_id=42, chunks_created=17, embedding_dimension=1536, ingestion_time_ms=1240
     )
 
-    response = IngestResponse(chunks=[chunk], stats=stats)
+    assert response.model_dump() == {
+        "document_id": 42,
+        "chunks_created": 17,
+        "embedding_dimension": 1536,
+        "ingestion_time_ms": 1240,
+    }
 
-    assert response.stats.total_chunks == 1
-    assert response.chunks[0].embedding == [0.1]
+
+@pytest.mark.parametrize("field", ["chunks_created", "ingestion_time_ms"])
+def test_ingest_response_counts_cannot_be_negative(field):
+    values = {
+        "document_id": 1,
+        "chunks_created": 1,
+        "embedding_dimension": 1536,
+        "ingestion_time_ms": 1,
+        field: -1,
+    }
+
+    with pytest.raises(ValidationError):
+        IngestResponse(**values)

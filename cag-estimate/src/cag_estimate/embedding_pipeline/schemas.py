@@ -1,4 +1,4 @@
-"""Schemas of the embedding pipeline: historical budgets in, embedded chunks out.
+"""Schemas of the embedding pipeline: historical budgets in, embedded chunks and ingest stats out.
 
 Unknown fields in the input are ignored so a richer budget file still loads.
 """
@@ -70,29 +70,17 @@ class EmbeddedChunk(Chunk):
 
 
 class IngestRequest(BaseModel):
-    """Body of ``POST /embeddings/ingest``."""
+    """Body of ``POST /embeddings/ingest``: one budget and where it came from."""
 
-    budgets: list[Budget]
-
-    @field_validator("budgets")
-    @classmethod
-    def _require_budgets(cls, value: list[Budget]) -> list[Budget]:
-        if not value:
-            raise ValueError("send at least one budget to ingest")
-        return value
-
-
-class IngestStats(BaseModel):
-    """Totals of one ingestion run; the cost is an estimate from token counts."""
-
-    total_budgets: int
-    total_chunks: int
-    total_tokens: int
-    estimated_cost_usd: float
+    source_path: str = NonEmptyStr
+    document_type: str = Field(min_length=1, max_length=50)
+    content: Budget
 
 
 class IngestResponse(BaseModel):
     """Response of ``POST /embeddings/ingest``."""
 
-    chunks: list[EmbeddedChunk]
-    stats: IngestStats
+    document_id: int
+    chunks_created: int = Field(ge=0)
+    embedding_dimension: int
+    ingestion_time_ms: int = Field(ge=0)

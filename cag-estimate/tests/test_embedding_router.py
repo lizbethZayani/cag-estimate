@@ -5,20 +5,18 @@ from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 from structlog.testing import capture_logs
 
 from cag_estimate import dependencies
 from cag_estimate.config import Settings
-from cag_estimate.dependencies import get_embedding_service
-from cag_estimate.embedding_pipeline.schemas import (
-    Budget,
-    EmbeddedChunk,
-    IngestResponse,
-    IngestStats,
-)
+from cag_estimate.dependencies import get_rag_ingest_service
+from cag_estimate.embedding_pipeline.ingest_service import DuplicateDocumentError
+from cag_estimate.embedding_pipeline.schemas import IngestRequest, IngestResponse
 from cag_estimate.main import app
 
 SECRET = "sk-secret-failure-detail"
+SOURCE_PATH = "data/budgets/budget_2024_q1_fintech.json"
 
 
 def make_budget_payload(budget_id: str = "BUD-1") -> dict[str, Any]:
@@ -41,29 +39,28 @@ def make_budget_payload(budget_id: str = "BUD-1") -> dict[str, Any]:
     }
 
 
+def make_body(**overrides: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "source_path": SOURCE_PATH,
+        "document_type": "historical_budget",
+        "content": make_budget_payload(),
+    }
+    body.update(overrides)
+    return body
+
+
 class FakeService:
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
-        self.received: list[Budget] = []
+        self.received: list[IngestRequest] = []
 
-    def ingest(self, budgets: list[Budget]) -> IngestResponse:
+    async def ingest(self, request: IngestRequest) -> IngestResponse:
         if self.error:
             raise self.error
-        self.received = budgets
-        chunk = EmbeddedChunk(
-            chunk_id="BUD-1_AUTH-001",
-            text="text",
-            metadata={"budget_id": "BUD-1"},
-            token_count=12,
-            embedding=[0.1, 0.2],
+        self.received.append(request)
+        return IngestResponse(
+            document_id=42, chunks_created=17, embedding_dimension=1536, ingestion_time_ms=1240
         )
-        stats = IngestStats(
-            total_budgets=len(budgets),
-            total_chunks=1,
-            total_tokens=12,
-            estimated_cost_usd=0.00000024,
-        )
-        return IngestResponse(chunks=[chunk], stats=stats)
 
 
 @pytest.fixture
@@ -73,7 +70,7 @@ def service() -> FakeService:
 
 @pytest.fixture(autouse=True)
 def overrides(service: FakeService) -> Iterator[None]:
-    app.dependency_overrides[get_embedding_service] = lambda: service
+    app.dependency_overrides[get_rag_ingest_service] = lambda: service
     yield
     app.dependency_overrides.clear()
 
@@ -86,71 +83,109 @@ async def client() -> AsyncIterator[httpx.AsyncClient]:
 
 
 async def test_ingest_returns_the_documented_shape(client, service):
-    response = await client.post("/embeddings/ingest", json={"budgets": [make_budget_payload()]})
+    response = await client.post("/embeddings/ingest", json=make_body())
 
     assert response.status_code == 200
-    body = response.json()
-    assert set(body["chunks"][0]) == {"chunk_id", "text", "metadata", "token_count", "embedding"}
-    assert set(body["stats"]) == {
-        "total_budgets",
-        "total_chunks",
-        "total_tokens",
-        "estimated_cost_usd",
+    assert response.json() == {
+        "document_id": 42,
+        "chunks_created": 17,
+        "embedding_dimension": 1536,
+        "ingestion_time_ms": 1240,
     }
-    assert body["stats"]["total_budgets"] == 1
-    assert [budget.budget_id for budget in service.received] == ["BUD-1"]
+    assert service.received[0].source_path == SOURCE_PATH
+    assert service.received[0].content.budget_id == "BUD-1"
+
+
+async def test_duplicate_returns_409_with_the_literal_top_level_body(client, service):
+    service.error = DuplicateDocumentError(42)
+
+    response = await client.post("/embeddings/ingest", json=make_body())
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Document already ingested", "document_id": 42}
+
+
+def invalid_budget(**changes: Any) -> dict[str, Any]:
+    return {**make_budget_payload(), **changes}
 
 
 @pytest.mark.parametrize(
-    "payload",
+    "body",
     [
-        {"budgets": []},
-        {},
-        {"budgets": [{"budget_id": "BUD-1"}]},
+        {"source_path": SOURCE_PATH, "document_type": "historical_budget"},
+        make_body(content=invalid_budget(components=[])),
+        make_body(
+            content=invalid_budget(
+                client_metadata={"name": "X", "sector": "retail", "country": "ES"}
+            )
+        ),
+        make_body(source_path=""),
+        make_body(document_type=""),
+        {"budgets": [make_budget_payload()]},
         ["not", "an", "object"],
     ],
 )
-async def test_invalid_bodies_are_rejected_with_422(client, payload):
-    response = await client.post("/embeddings/ingest", json=payload)
+async def test_invalid_bodies_are_rejected_with_422(client, body):
+    response = await client.post("/embeddings/ingest", json=body)
 
     assert response.status_code == 422
 
 
-async def test_service_failure_returns_a_generic_500(client, service):
-    service.error = RuntimeError(SECRET)
+async def test_embeddings_failure_returns_a_generic_500(client, service):
+    service.error = ValueError(SECRET)
 
     with capture_logs() as logs:
-        response = await client.post(
-            "/embeddings/ingest", json={"budgets": [make_budget_payload()]}
-        )
+        response = await client.post("/embeddings/ingest", json=make_body())
 
     assert response.status_code == 500
     assert SECRET not in response.text
     assert response.json() == {"detail": "The embeddings service failed. Please try again later."}
     event = next(entry for entry in logs if entry["event"] == "ingest_failed")
-    assert event["error_type"] == "RuntimeError"
+    assert event["error_type"] == "ValueError"
     assert event["error"] == SECRET
 
 
-async def test_missing_openai_key_returns_503(client, monkeypatch):
+@pytest.mark.parametrize("error", [SQLAlchemyError(SECRET), OSError(SECRET)])
+async def test_database_failures_return_a_generic_503(client, service, error):
+    service.error = error
+
+    response = await client.post("/embeddings/ingest", json=make_body())
+
+    assert response.status_code == 503
+    assert SECRET not in response.text
+    assert response.json() == {"detail": "The database is not available."}
+
+
+async def test_unconfigured_database_url_returns_a_generic_503(client, service):
+    service.error = RuntimeError("DATABASE_URL is not set; the database is not configured.")
+
+    response = await client.post("/embeddings/ingest", json=make_body())
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "The database is not available."}
+
+
+async def test_missing_service_returns_503(client, monkeypatch):
     app.dependency_overrides.clear()
     settings = Settings(anthropic_api_key="test", openai_api_key=None)
     monkeypatch.setattr(dependencies, "get_settings", lambda: settings)
-    get_embedding_service.cache_clear()
+    dependencies.get_embedder.cache_clear()
+    get_rag_ingest_service.cache_clear()
 
     try:
-        response = await client.post(
-            "/embeddings/ingest", json={"budgets": [make_budget_payload()]}
-        )
+        response = await client.post("/embeddings/ingest", json=make_body())
     finally:
-        get_embedding_service.cache_clear()
+        dependencies.get_embedder.cache_clear()
+        get_rag_ingest_service.cache_clear()
 
     assert response.status_code == 503
     assert response.json() == {"detail": "The embeddings service is not configured."}
 
 
-def test_build_embedding_service_uses_a_client_without_sdk_retries(monkeypatch):
-    settings = Settings(anthropic_api_key="test", openai_api_key="sk-test")
+def test_build_embedder_uses_a_client_without_sdk_retries(monkeypatch):
+    settings = Settings(
+        anthropic_api_key="test", openai_api_key="sk-test", embedding_model="embed-model"
+    )
     created: dict[str, Any] = {}
 
     def fake_openai(**kwargs: Any) -> object:
@@ -160,11 +195,18 @@ def test_build_embedding_service_uses_a_client_without_sdk_retries(monkeypatch):
     monkeypatch.setattr(dependencies, "get_settings", lambda: settings)
     monkeypatch.setattr(dependencies, "OpenAI", fake_openai)
 
-    assert dependencies.build_embedding_service() is not None
+    assert dependencies.build_embedder() is not None
     assert created == {"api_key": "sk-test", "max_retries": 0}
 
 
-def test_build_embedding_service_fails_soft_when_the_client_cannot_be_built(monkeypatch):
+def test_build_embedder_is_none_without_a_key(monkeypatch):
+    settings = Settings(anthropic_api_key="test", openai_api_key=None)
+    monkeypatch.setattr(dependencies, "get_settings", lambda: settings)
+
+    assert dependencies.build_embedder() is None
+
+
+def test_build_embedder_fails_soft_when_the_client_cannot_be_built(monkeypatch):
     settings = Settings(anthropic_api_key="test", openai_api_key="sk-test")
 
     def broken_openai(**_kwargs: Any) -> object:
@@ -173,11 +215,50 @@ def test_build_embedding_service_fails_soft_when_the_client_cannot_be_built(monk
     monkeypatch.setattr(dependencies, "get_settings", lambda: settings)
     monkeypatch.setattr(dependencies, "OpenAI", broken_openai)
 
-    assert dependencies.build_embedding_service() is None
+    assert dependencies.build_embedder() is None
+
+
+def test_build_rag_ingest_service_needs_a_database_url(monkeypatch):
+    settings = Settings(anthropic_api_key="test", openai_api_key="sk-test", database_url=None)
+    monkeypatch.setattr(dependencies, "get_settings", lambda: settings)
+    monkeypatch.setattr(dependencies, "get_embedder", lambda: object())
+
+    assert dependencies.build_rag_ingest_service() is None
+
+
+def test_build_rag_ingest_service_needs_an_embedder(monkeypatch):
+    settings = Settings(
+        anthropic_api_key="test",
+        openai_api_key=None,
+        database_url="postgresql+asyncpg://u:p@localhost:5433/db",
+    )
+    monkeypatch.setattr(dependencies, "get_settings", lambda: settings)
+    monkeypatch.setattr(dependencies, "get_embedder", lambda: None)
+
+    assert dependencies.build_rag_ingest_service() is None
+
+
+def test_build_rag_ingest_service_is_built_when_configured(monkeypatch):
+    settings = Settings(
+        anthropic_api_key="test",
+        openai_api_key="sk-test",
+        database_url="postgresql+asyncpg://u:p@localhost:5433/db",
+    )
+    monkeypatch.setattr(dependencies, "get_settings", lambda: settings)
+    monkeypatch.setattr(dependencies, "get_embedder", lambda: object())
+    monkeypatch.setattr(dependencies, "get_async_session_factory", lambda: object())
+
+    assert dependencies.build_rag_ingest_service() is not None
 
 
 def test_ingest_route_is_in_the_openapi_schema():
-    assert "post" in app.openapi()["paths"]["/embeddings/ingest"]
+    operation = app.openapi()["paths"]["/embeddings/ingest"]["post"]
+
+    assert "200" in operation["responses"]
+    assert (
+        "IngestResponse"
+        in operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]
+    )
 
 
 async def test_existing_routes_still_work(client):
