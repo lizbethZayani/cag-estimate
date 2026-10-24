@@ -14,6 +14,7 @@ from cag_estimate.db.session import get_async_session_factory
 from cag_estimate.embedding_pipeline.chunker import JSONStructuralChunker
 from cag_estimate.embedding_pipeline.embedder import OpenAIEmbedder
 from cag_estimate.embedding_pipeline.ingest_service import RagIngestService
+from cag_estimate.embedding_pipeline.retriever import SemanticRetriever
 from cag_estimate.prompts import render_system_prompt
 from cag_estimate.services.cache import get_cache
 from cag_estimate.services.critic import Critic
@@ -72,13 +73,21 @@ def get_embedder() -> OpenAIEmbedder | None:
     return build_embedder()
 
 
-def build_rag_ingest_service() -> RagIngestService | None:
-    """Persisting ingest service, or None without an embedder or ``DATABASE_URL``."""
+def _get_embedder_with_database() -> OpenAIEmbedder | None:
+    """The embedder, or None when it or ``DATABASE_URL`` is missing (RAG services need both)."""
     embedder = get_embedder()
     if embedder is None:
         return None
     if get_settings().database_url is None:
         log.warning("embedding_service_unavailable", reason="no_database_url")
+        return None
+    return embedder
+
+
+def build_rag_ingest_service() -> RagIngestService | None:
+    """Persisting ingest service, or None without an embedder or ``DATABASE_URL``."""
+    embedder = _get_embedder_with_database()
+    if embedder is None:
         return None
     return RagIngestService(get_async_session_factory(), JSONStructuralChunker(), embedder)
 
@@ -87,6 +96,20 @@ def build_rag_ingest_service() -> RagIngestService | None:
 def get_rag_ingest_service() -> RagIngestService | None:
     """Process-wide ingest service (None when not configured)."""
     return build_rag_ingest_service()
+
+
+def build_semantic_retriever() -> SemanticRetriever | None:
+    """Semantic retriever, or None without an embedder or ``DATABASE_URL``."""
+    embedder = _get_embedder_with_database()
+    if embedder is None:
+        return None
+    return SemanticRetriever(get_async_session_factory(), embedder)
+
+
+@lru_cache
+def get_semantic_retriever() -> SemanticRetriever | None:
+    """Process-wide semantic retriever (None when not configured)."""
+    return build_semantic_retriever()
 
 
 def build_semantic_cache() -> EstimationSemanticCache | None:

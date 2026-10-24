@@ -15,6 +15,7 @@ from cag_estimate.embedding_pipeline.ingest_service import (
     DuplicateDocumentError,
     RagIngestService,
 )
+from cag_estimate.embedding_pipeline.retriever import SearchEmbeddingError, SemanticRetriever
 from cag_estimate.embedding_pipeline.schemas import (
     Budget,
     BudgetComponent,
@@ -24,6 +25,9 @@ from cag_estimate.embedding_pipeline.schemas import (
     EmbeddedChunk,
     IngestRequest,
     IngestResponse,
+    SearchRequest,
+    SearchResponse,
+    SearchResultItem,
     Sector,
 )
 
@@ -41,7 +45,12 @@ __all__ = [
     "JSONStructuralChunker",
     "OpenAIEmbedder",
     "RagIngestService",
+    "SearchEmbeddingError",
+    "SearchRequest",
+    "SearchResponse",
+    "SearchResultItem",
     "Sector",
+    "SemanticRetriever",
     "TiktokenCounter",
     "TokenCounter",
     "cosine_similarity",

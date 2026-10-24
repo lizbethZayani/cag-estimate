@@ -3,11 +3,13 @@
 Unknown fields in the input are ignored so a richer budget file still loads.
 """
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 NonEmptyStr = Field(min_length=1)
+DEFAULT_SEARCH_K = 5
+MAX_SEARCH_K = 50
 
 Sector = Literal["finance", "ecommerce", "healthcare", "industrial"]
 Complexity = Literal["low", "medium", "high"]
@@ -84,3 +86,30 @@ class IngestResponse(BaseModel):
     chunks_created: int = Field(ge=0)
     embedding_dimension: int
     ingestion_time_ms: int = Field(ge=0)
+
+
+class SearchRequest(BaseModel):
+    """Body of ``POST /search``: a free-text query and how many chunks to return."""
+
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    k: int = Field(default=DEFAULT_SEARCH_K, ge=1, le=MAX_SEARCH_K)
+
+
+class SearchResultItem(BaseModel):
+    """One retrieved chunk; ``distance`` is the raw cosine distance (lower = closer)."""
+
+    chunk_id: int
+    document_id: int
+    chunk_type: str
+    content: str
+    distance: float
+    metadata: dict[str, Any]
+
+
+class SearchResponse(BaseModel):
+    """Response of ``POST /search``: results ordered by ascending distance."""
+
+    query: str
+    k: int
+    search_time_ms: int = Field(ge=0)
+    results: list[SearchResultItem]
