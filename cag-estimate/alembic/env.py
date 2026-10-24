@@ -8,8 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
 from cag_estimate.config import get_settings
-
-# The models module is imported here in P2 so autogenerate sees every table.
+from cag_estimate.db import models  # noqa: F401  (registers the tables on Base.metadata)
 from cag_estimate.db.base import Base
 
 config = context.config

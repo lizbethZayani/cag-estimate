@@ -51,6 +51,7 @@ target-version = "py311"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src/ui"]
+markers = ["integration: needs the compose pgvector container (localhost:5433)"]
 
 [build-system]
 requires = ["uv_build>=0.12.7,<0.13.0"]
