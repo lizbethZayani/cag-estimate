@@ -1,0 +1,42 @@
+Ingested 15, already present 0
+
+Query 1: OAuth 2.0 authentication with JWT tokens
+  1. chunk_id=17 distance=0.5133 type=budget_component | [Project: Mobile banking API with OAuth 2.0 authentication and PSD2 compliance] [Client sector: finance | Year: 2024 | M
+  2. chunk_id=18 distance=0.6219 type=budget_component | [Project: Mobile banking API with OAuth 2.0 authentication and PSD2 compliance] [Client sector: finance | Year: 2024 | M
+  3. chunk_id=20 distance=0.6764 type=budget_component | [Project: Mobile banking API with OAuth 2.0 authentication and PSD2 compliance] [Client sector: finance | Year: 2024 | M
+  4. chunk_id=19 distance=0.6795 type=budget_component | [Project: Mobile banking API with OAuth 2.0 authentication and PSD2 compliance] [Client sector: finance | Year: 2024 | M
+  5. chunk_id=26 distance=0.7213 type=budget_component | [Project: Real-time payments gateway with fraud detection and reconciliation] [Client sector: finance | Year: 2023 | Mai
+  search_time_ms=233
+
+Query 2: payment processing with Stripe
+  1. chunk_id=25 distance=0.5848 type=budget_component | [Project: Real-time payments gateway with fraud detection and reconciliation] [Client sector: finance | Year: 2023 | Mai
+  2. chunk_id=28 distance=0.5964 type=budget_component | [Project: Real-time payments gateway with fraud detection and reconciliation] [Client sector: finance | Year: 2023 | Mai
+  3. chunk_id=27 distance=0.6150 type=budget_component | [Project: Real-time payments gateway with fraud detection and reconciliation] [Client sector: finance | Year: 2023 | Mai
+  4. chunk_id=26 distance=0.6265 type=budget_component | [Project: Real-time payments gateway with fraud detection and reconciliation] [Client sector: finance | Year: 2023 | Mai
+  5. chunk_id=33 distance=0.6638 type=budget_component | [Project: Headless e-commerce storefront with personalized recommendations] [Client sector: ecommerce | Year: 2024 | Mai
+  search_time_ms=184
+
+Query 3: restaurant reservations
+  1. chunk_id=40 distance=0.7190 type=budget_component | [Project: Grocery delivery app with slot booking and route optimization] [Client sector: ecommerce | Year: 2024 | Main t
+  2. chunk_id=47 distance=0.7240 type=budget_component | [Project: Patient appointment and telemedicine platform with HL7/FHIR integration] [Client sector: healthcare | Year: 20
+  3. chunk_id=45 distance=0.7644 type=budget_component | [Project: Fashion returns management and resale portal] [Client sector: ecommerce | Year: 2023 | Main tech: dotnet] Comp
+  4. chunk_id=41 distance=0.7707 type=budget_component | [Project: Grocery delivery app with slot booking and route optimization] [Client sector: ecommerce | Year: 2024 | Main t
+  5. chunk_id=43 distance=0.7735 type=budget_component | [Project: Fashion returns management and resale portal] [Client sector: ecommerce | Year: 2023 | Main tech: dotnet] Comp
+  search_time_ms=201
+
+Query 4: high-complexity backend components
+  1. chunk_id=25 distance=0.5304 type=budget_component | [Project: Real-time payments gateway with fraud detection and reconciliation] [Client sector: finance | Year: 2023 | Mai
+  2. chunk_id=28 distance=0.5423 type=budget_component | [Project: Real-time payments gateway with fraud detection and reconciliation] [Client sector: finance | Year: 2023 | Mai
+  3. chunk_id=33 distance=0.5459 type=budget_component | [Project: Headless e-commerce storefront with personalized recommendations] [Client sector: ecommerce | Year: 2024 | Mai
+  4. chunk_id=26 distance=0.5657 type=budget_component | [Project: Real-time payments gateway with fraud detection and reconciliation] [Client sector: finance | Year: 2023 | Mai
+  5. chunk_id=32 distance=0.5680 type=budget_component | [Project: Headless e-commerce storefront with personalized recommendations] [Client sector: ecommerce | Year: 2024 | Mai
+  search_time_ms=187
+
+Query 5: real-time dashboard
+  1. chunk_id=52 distance=0.4987 type=budget_component | [Project: Remote patient monitoring with wearable data ingestion and alerts] [Client sector: healthcare | Year: 2024 | M
+  2. chunk_id=28 distance=0.5142 type=budget_component | [Project: Real-time payments gateway with fraud detection and reconciliation] [Client sector: finance | Year: 2023 | Mai
+  3. chunk_id=61 distance=0.5222 type=budget_component | [Project: Factory IoT telemetry and predictive maintenance system] [Client sector: industrial | Year: 2024 | Main tech: 
+  4. chunk_id=51 distance=0.6045 type=budget_component | [Project: Remote patient monitoring with wearable data ingestion and alerts] [Client sector: healthcare | Year: 2024 | M
+  5. chunk_id=30 distance=0.6080 type=budget_component | [Project: Robo-advisor portfolio rebalancing platform] [Client sector: finance | Year: 2024 | Main tech: python_fastapi]
+  search_time_ms=185
+

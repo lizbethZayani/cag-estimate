@@ -174,23 +174,30 @@ cag-estimate/
 │   │   ├── guardrails/                  # input.py, output.py, errors.py
 │   │   ├── cache/semantic.py            # Semantic cache (Redis Stack)
 │   │   ├── context/examples.py          # Reference estimation examples
-│   │   └── embedding_pipeline/          # Session 7: chunk + embed historical budgets
-│   │       ├── schemas.py               # Budget in, Chunk / EmbeddedChunk / IngestResponse out
+│   │   ├── db/                          # Session 8: async engine/session, ORM models (documents, chunks)
+│   │   └── embedding_pipeline/          # Sessions 7-8: chunk, embed, persist, search
+│   │       ├── schemas.py               # Ingest and search request/response models
 │   │       ├── chunker.py               # JSONStructuralChunker (one component = one chunk)
 │   │       ├── embedder.py              # OpenAIEmbedder, cost estimate, cosine_similarity
-│   │       ├── service.py               # EmbeddingIngestService (chunk -> embed -> stats)
-│   │       └── router.py                # POST /embeddings/ingest
+│   │       ├── repository.py            # ChunkStore: insert and cosine-distance query
+│   │       ├── ingest_service.py        # RagIngestService (one transaction)
+│   │       ├── retriever.py             # SemanticRetriever (embed query, top k)
+│   │       ├── router.py                # POST /embeddings/ingest
+│   │       └── search_router.py         # POST /search
+├── alembic/                             # Migrations (0001_initial_schema) + alembic.ini
 │   └── ui/
 │       ├── streamlit_app.py             # Chat UI (streaming + structured)
 │       ├── estimate_client.py           # HTTP client with safe error messages
 │       └── view_models.py               # Pure presentation helpers
 ├── tests/                               # Offline pytest suite
 ├── scripts/compare.py                   # CLI: cosine similarity between two texts
+├── scripts/query_examples.py            # Session 8: ingest the sample data and run 5 searches
+├── output_examples.txt                  # Real output of query_examples.py
 ├── data/                                # Sample budgets (budgets_sample.json, see Embedding pipeline)
 ├── session4/NOTES.md                    # Session 4 changes vs the reference repo
 ├── run_streamlit.sh                     # Launches the chat UI
 ├── Dockerfile                           # API container image
-├── docker-compose.yml                   # api + redis-stack + postgres + estimator-web
+├── docker-compose.yml                   # api + redis-stack + postgres + pgvector + estimator-web
 ├── docker-compose.override.yml          # Dev overrides (hot-reload)
 ├── DOCKER.md / VERIFICATION.md          # Docker and verification guides
 └── pyproject.toml                       # Project configuration
@@ -560,77 +567,69 @@ Append an object to `golden_dataset.json`: `id` (3 to 64 characters, unique), `d
 - **Memory rules are strict.** A renamed project or fewer total hours after an additive follow-up fails the case, even if a human might accept it.
 - **Cost and time.** A full run makes about 20 estimate calls; `--mode acb` multiplies that.
 
-## Embedding pipeline (session 7 pre-exercise)
+## Embedding pipeline (sessions 7 and 8)
 
-A minimal pipeline that chunks historical budgets structurally and embeds each chunk with OpenAI `text-embedding-3-small`. Code: `src/cag_estimate/embedding_pipeline/`.
+Historical budgets are chunked structurally, embedded with OpenAI `text-embedding-3-small`, stored in PostgreSQL + pgvector and searched by cosine distance. Code: `src/cag_estimate/embedding_pipeline/` and `src/cag_estimate/db/`.
 
-**What it is.** `POST /embeddings/ingest` takes budgets, builds one chunk per budget component and returns the chunks with their embedding vectors and run stats. `scripts/compare.py` embeds two texts and prints their cosine similarity.
+**What it is.** `POST /embeddings/ingest` takes ONE budget, builds one chunk per component, embeds the chunks and persists the document and its chunks in a single transaction. `POST /search` embeds a query and returns the k nearest chunks. `scripts/compare.py` (kept from session 7) embeds two texts and prints their cosine similarity.
 
-**What it is NOT.** The vectors are returned over HTTP and are **not persisted**. Persistence, retrieval and other chunking strategies come in later sessions.
+**What it is NOT.** No vector index, no metadata filters, no hybrid search (see "Out of scope" below).
 
 ### How it works
 
-1. `JSONStructuralChunker` makes one chunk per `BudgetComponent`, with no overlap and no splitting. The chunk text starts with a header from the parent budget (project summary, client sector, year, main technology) so a component keeps its context once embedded alone. `chunk_id` is `{budget_id}::{component_id}`; a duplicate id raises an error. `metadata` (budget id, component id, sector, main technology, year, complexity, estimated hours) is returned with the chunk but **not embedded**. `token_count` is measured with tiktoken.
+1. `JSONStructuralChunker` makes one chunk per `BudgetComponent`, with no overlap and no splitting. The chunk text starts with a header from the parent budget (project summary, client sector, year, main technology) so a component keeps its context once embedded alone. `chunk_id` is `{budget_id}::{component_id}`; a duplicate id raises an error. `metadata` (budget id, component id, sector, main technology, year, complexity, estimated hours) is stored with the chunk but **not embedded**. `token_count` is measured with tiktoken.
 2. `OpenAIEmbedder` sends the chunk texts in batches of 100. A rate-limit error is retried up to 3 times, waiting 1s, 2s and 4s. Out-of-credit errors (`insufficient_quota` / `credit_balance_exhausted`) are **not** retried, because waiting does not fix them. No `dimensions` is sent, so vectors have the model default of 1536 dimensions.
-3. `stats` come from the chunks' token counts and the constant `EMBEDDING_PRICE_PER_M_TOKENS_USD` (`0.02`, USD per 1M tokens) in `embedder.py`. The price changes over time, so treat `estimated_cost_usd` as an estimate.
+3. `embedder.py` keeps a cost estimate from the chunks' token counts and the constant `EMBEDDING_PRICE_PER_M_TOKENS_USD` (`0.02`, USD per 1M tokens). The price changes over time, so treat it as an estimate. The ingest endpoint no longer returns it.
 
 | File | Role |
 |------|------|
-| `schemas.py` | Pydantic models: `Budget`, `BudgetComponent`, `Chunk`, `EmbeddedChunk`, `IngestRequest`, `IngestResponse`, `IngestStats` |
+| `schemas.py` | Pydantic models: `Budget`, `BudgetComponent`, `Chunk`, ingest and search request/response models |
 | `chunker.py` | `JSONStructuralChunker`, `TiktokenCounter` |
 | `embedder.py` | `OpenAIEmbedder` (batching, retries), cost estimate, hand-written `cosine_similarity` |
-| `service.py` | `EmbeddingIngestService`: chunk, embed, build stats |
-| `router.py` | `POST /embeddings/ingest` |
+| `repository.py` | `ChunkStore`: find, insert and cosine-distance query |
+| `ingest_service.py` | `RagIngestService`: exists check, chunk, one batched embedding call, persist |
+| `retriever.py` | `SemanticRetriever`: embed the query, return the top k |
+| `router.py` / `search_router.py` | `POST /embeddings/ingest` / `POST /search` |
+| `db/` | Async engine and session, ORM models `DocumentRow` / `ChunkRow` |
 | `scripts/compare.py` | CLI that compares two texts |
 
 ### Endpoint: `POST /embeddings/ingest`
 
-The route is `/embeddings/ingest`, **not** under `/api/v1`. Request body: `{"budgets": [...]}` with at least one budget, and each budget needs at least one component. Unknown fields are ignored.
+The route is not under `/api/v1`. The body holds ONE budget (shape as in `data/budgets_sample.json`, unknown fields ignored):
 
 ```json
-{
-  "budgets": [
-    {
-      "budget_id": "B-001",
-      "client_metadata": {"name": "Acme Retail", "sector": "retail", "country": "ES"},
-      "project_summary": "Online store with catalog and checkout",
-      "main_technology": "Python",
-      "year": 2024,
-      "total_estimated_hours": 120,
-      "components": [
-        {
-          "component_id": "C-01",
-          "name": "Checkout API",
-          "description": "REST endpoints for cart and payment",
-          "tech_stack": ["FastAPI", "PostgreSQL"],
-          "estimated_hours": 120,
-          "complexity": "medium",
-          "dependencies": []
-        }
-      ]
-    }
-  ]
-}
+{"source_path": "data/budgets_sample.json::BUD-2024-001", "document_type": "historical_budget", "content": {"budget_id": "BUD-2024-001", "...": "one budget object"}}
 ```
-
-Response `200`: `{"chunks": [...], "stats": {...}}`. Each chunk has `chunk_id`, `text`, `metadata`, `token_count` and `embedding`. `stats` has `total_budgets`, `total_chunks`, `total_tokens` and `estimated_cost_usd`.
 
 | Status | When |
 |--------|------|
-| `200` | Chunks embedded |
-| `422` | Invalid body (FastAPI validation), e.g. an empty `budgets` list |
-| `500` | The embeddings API failed. Generic body, details only in the logs. This is a documented exception to the 502 rule (see `AGENTS.md`) that follows the exercise brief |
-| `503` | `OPENAI_API_KEY` is not configured |
+| `200` | `{document_id, chunks_created, embedding_dimension: 1536, ingestion_time_ms}` |
+| `409` | `{"detail": "Document already ingested", "document_id": N}` (same `source_path`) |
+| `422` | Invalid body |
+| `500` | The embeddings API failed. Generic body, details only in the logs. A documented exception to the 502 rule (see `AGENTS.md`) that follows the exercise brief |
+| `503` | Database or `OPENAI_API_KEY` not configured |
 
-Try it with curl (save the example body above as `/tmp/budget.json` first):
+### Endpoint: `POST /search`
+
+Body `{"query": "...", "k": 5}` (`k` 1 to 50, default 5). Response: `{query, k, search_time_ms, results: [{chunk_id, document_id, chunk_type, content, distance, metadata}]}`, ordered by ascending cosine distance. An empty corpus returns `200` with `results: []`. Errors: `422` invalid body, `502` embeddings failure, `503` database or key not configured.
 
 ```bash
-curl -s -X POST http://localhost:8000/embeddings/ingest \
-  -H "Content-Type: application/json" \
-  -d @/tmp/budget.json
+curl -s -X POST http://localhost:8000/search -H "Content-Type: application/json" \
+  -d '{"query": "OAuth 2.0 authentication with JWT tokens", "k": 3}'
 ```
 
-It is also in Swagger at **http://localhost:8000/docs** under the `embeddings` tag.
+Both endpoints are in Swagger at **http://localhost:8000/docs**.
+
+### Run it
+
+```bash
+docker compose up -d pgvector redis api
+docker compose run --rm --no-deps api alembic upgrade head    # manual migration
+docker compose exec api python scripts/query_examples.py      # ingest 15 budgets + 5 queries
+docker compose exec pgvector psql -U estimator -d estimator -c "\d chunks"
+```
+
+`scripts/query_examples.py` ingests `data/budgets_sample.json` one budget per call (`source_path` `data/budgets_sample.json::<budget_id>`; a `409` counts as already present, so it is idempotent) and then runs 5 queries. Options: `--data`, `--k`; env `API_BASE_URL` (default `http://localhost:8000`). Exit codes: `0`, `1`, `2`. Its real output is in [`output_examples.txt`](output_examples.txt): `Ingested 15, already present 0`, 15 documents and 52 chunks, and the OAuth query returns the OAuth banking chunks first (best distance 0.5133). An out-of-domain query ("restaurant reservations") has a best distance of 0.7190. One ingest (4 chunks) took about 0.3 to 5.6 s and one search about 0.17 to 0.23 s, both including the OpenAI call.
 
 ### Compare two texts
 
@@ -653,35 +652,51 @@ PYTHONPATH=src uv run python scripts/compare.py --text-a "Login form with OAuth"
 
 ### Sample data
 
-`data/budgets_sample.json` (15 historical budgets, 52 components) is committed in the project directory, next to `docker-compose.yml` (it is mounted read-only into the `api` container). The endpoint expects `{"budgets": [...]}`, and the file is a bare list, so wrap it and send it:
-
-```bash
-python3 -c 'import json; print(json.dumps({"budgets": json.load(open("data/budgets_sample.json"))}))' > /tmp/ingest_body.json
-curl -s -X POST http://localhost:8000/embeddings/ingest -H "Content-Type: application/json" -d @/tmp/ingest_body.json
-```
-
-Measured result with this file (real OpenAI call, 2026-10-18): HTTP 200, 15 budgets, **52 chunks** (one per component, 52 unique ids), 1536-dimension vectors, **4,126 tokens**, estimated cost **$0.0000825**. The three-pair similarity check is in [`SANITY_CHECK.md`](src/cag_estimate/embedding_pipeline/SANITY_CHECK.md).
+`data/budgets_sample.json` (15 historical budgets, 52 components) is a bare list of budgets, committed next to `docker-compose.yml` and mounted read-only into the `api` container. `scripts/query_examples.py` sends one budget per call. The similarity check of the session 7 run is in [`SANITY_CHECK.md`](src/cag_estimate/embedding_pipeline/SANITY_CHECK.md).
 
 ### Dependencies and tests
 
-After changing dependencies (for example `tiktoken`), rebuild only the API image:
+After changing dependencies, rebuild only the API image:
 
 ```bash
 docker compose up -d --build --no-deps api
 ```
 
-Tests for this module are offline (fake OpenAI client):
-
 ```bash
-PYTHONPATH=src uv run pytest -q tests/test_embedding_*.py tests/test_compare_script.py
+PYTHONPATH=src uv run pytest -q -m "not integration"   # offline (fake OpenAI client)
+PYTHONPATH=src uv run pytest -q -m integration         # live DB tests
 ```
+
+The live tests need the `pgvector` container and an `estimator_test` database (create once: `docker compose exec pgvector psql -U estimator -d estimator -c "CREATE DATABASE estimator_test"`). They skip when the database is unreachable. Current total: 921 passed, including 16 live integration tests.
 
 ### Limitations
 
-- Real calls need OpenAI credit; without it OpenAI answers `429` (`insufficient_quota`) and the endpoint returns `500`.
+- Real calls need OpenAI credit; without it OpenAI answers `429` (`insufficient_quota`): ingest returns `500` and search returns `502`.
 - tiktoken downloads its encoding file on first use, so the first run needs network access.
 - A chunk above 8191 tokens (the model's input limit) is only logged as a warning, not split.
-- Nothing is stored: every call embeds again and costs tokens.
+
+## Persistence and semantic search
+
+**Two tables.** `documents` (one row per ingested budget: `source_path`, `document_type`, `ingested_at`, `metadata`) and `chunks` (one row per budget component, `document_id` FK with `ON DELETE CASCADE`). The relation is 1:N: one document is one budget, one chunk is one component. Deleting a document removes its chunks. The migration is `alembic/versions/0001_initial_schema.py`.
+
+**JSONB metadata.** Stable fields are typed columns (`id`, `source_path`, `chunk_type`, `content`, `embedding`). Attributes that vary per chunk live in `chunks.metadata` (JSONB) with a GIN index, so adding an attribute needs no migration. Seven keys today: `budget_id`, `component_id`, `client_sector`, `main_technology`, `year`, `complexity`, `estimated_hours`. Metadata is stored but **not embedded**: only `content` becomes a vector.
+
+**Cosine distance.** Search orders by `<=>` (`Chunk.embedding.cosine_distance` in SQLAlchemy). `text-embedding-3-small` vectors are normalised, so ranking by cosine is ranking by angle. Lower is closer, range 0 to 2. This matches `vector_cosine_ops`, the operator class the future HNSW index must use: an index built with another operator class would silently not be used and the query would fall back to a sequential scan.
+
+**No vector index yet.** HNSW and IVFFlat are deliberately omitted. With 52 chunks a sequential scan is exact and instant, and it is the baseline measured in the live session before adding an index. Vector indexes are approximate and add build time and memory cost.
+
+Other decisions:
+
+| Decision | Why / consequence |
+|----------|-------------------|
+| `vector(1536)` hardcoded | Matches the model dimension; a different model needs a migration |
+| `embedding` nullable | A chunk can exist before its vector; rows with `NULL` are skipped by search |
+| `ix_documents_source_path` non-unique | The `409` is a check-then-insert, so it is **not race-proof** (known limitation) |
+| One transaction per ingest | An embeddings failure rolls the document back: no orphan documents or chunks |
+
+**Docker and migrations.** The `pgvector` service (`pgvector/pgvector:pg16`, extension 0.8.7, PostgreSQL 16.15) listens on host port 5433 and is separate from the Rails `postgres`; see [`DOCKER.md`](DOCKER.md). Migrations are manual: `docker compose run --rm --no-deps api alembic upgrade head` (also `alembic current`, `alembic downgrade base`). Downgrade drops the tables and keeps the `vector` extension.
+
+**Out of scope:** vector indexes (HNSW/IVFFlat), metadata filters, hybrid search, parameter tuning.
 
 ## Web UI (Rails)
 
