@@ -38,6 +38,8 @@ PYTHONPATH=src uv run pytest -q
 uv run ruff check .
 ```
 
+> Count superseded: see `session8/MANUAL_VALIDATION.md` for the current expected number.
+
 Expected: `802 passed` (a higher number is fine if tests were added; there must be 0 failures) and `All checks passed!`.
 
 ### V2. Stack is up and the endpoint is visible
@@ -49,7 +51,11 @@ curl -s localhost:8000/openapi.json | python3 -c "import sys,json;print([p for p
 
 Expected: `{"status":"ok","service":"CAG Estimate API"}` and `['/embeddings/ingest']`. Then open http://localhost:8000/docs: there is an **embeddings** tag with `POST /embeddings/ingest`. In Swagger you can use "Try it out" with a body shaped `{"budgets": [ ...the array from the file... ]}`.
 
+> SUPERSEDED by session 8: the `{"budgets": ...}` body hint is obsolete (the endpoint now takes one budget with `source_path`). See `session8/MANUAL_VALIDATION.md`.
+
 ### V3. Ingest the official sample
+
+> SUPERSEDED by session 8 (the endpoint persists one budget per call and no longer returns chunks). Kept as history. See `session8/MANUAL_VALIDATION.md`.
 
 ```bash
 python3 -c 'import json; print(json.dumps({"budgets": json.load(open("data/budgets_sample.json"))}))' > /tmp/ingest_body.json
@@ -78,6 +84,8 @@ Tolerance: `total_tokens` can differ by a few tokens if your `tiktoken` version 
 
 ### V4. Chunk text format
 
+> SUPERSEDED by session 8 (depends on the V3 response). Kept as history. See `session8/MANUAL_VALIDATION.md`.
+
 Print the text of the first chunk: `python3 -c "import json;print(json.load(open('/tmp/ingest_out.json'))['chunks'][0]['text'])"`. Expected (exactly this, including the blank line):
 
 ```
@@ -95,9 +103,13 @@ Metadata of that chunk (not embedded): `budget_id` BUD-2024-001, `component_id` 
 
 ### V5. Cost arithmetic
 
+> SUPERSEDED by session 8 (the endpoint no longer returns `estimated_cost_usd`). Kept as history. See `session8/MANUAL_VALIDATION.md`.
+
 `4126 tokens / 1,000,000 * $0.02 = $0.00008252`. The `estimated_cost_usd` from V3 must equal that (the price constant is in `embedder.py` and changes over time).
 
 ### V6. Endpoint error paths (no OpenAI call)
+
+> SUPERSEDED by session 8 (new request contract; the empty-`budgets` case no longer exists). Kept as history. See `session8/MANUAL_VALIDATION.md`.
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" -X POST localhost:8000/embeddings/ingest -H "Content-Type: application/json" -d '{"budgets":[]}'
