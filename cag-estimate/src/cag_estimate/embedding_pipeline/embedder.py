@@ -12,7 +12,7 @@ import openai
 import structlog
 
 from cag_estimate.embedding_pipeline.chunker import EMBEDDING_MODEL
-from cag_estimate.embedding_pipeline.schemas import Chunk, EmbeddedChunk, IngestStats
+from cag_estimate.embedding_pipeline.schemas import Chunk, EmbeddedChunk
 
 # Current price of text-embedding-3-small in USD per 1M tokens; it changes over time.
 EMBEDDING_PRICE_PER_M_TOKENS_USD = 0.02
@@ -134,17 +134,6 @@ class OpenAIEmbedder:
 def estimate_cost_usd(total_tokens: int) -> float:
     """Estimated embedding cost in USD for ``total_tokens`` tokens."""
     return round(total_tokens / 1_000_000 * EMBEDDING_PRICE_PER_M_TOKENS_USD, COST_DECIMALS)
-
-
-def build_ingest_stats(total_budgets: int, chunks: list[EmbeddedChunk]) -> IngestStats:
-    """Totals of one ingestion run, with the cost estimated from the chunks' token counts."""
-    total_tokens = sum(chunk.token_count for chunk in chunks)
-    return IngestStats(
-        total_budgets=total_budgets,
-        total_chunks=len(chunks),
-        total_tokens=total_tokens,
-        estimated_cost_usd=estimate_cost_usd(total_tokens),
-    )
 
 
 def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:

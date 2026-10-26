@@ -16,7 +16,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from cag_estimate.config import get_settings
+from cag_estimate.db.session import dispose_async_engine
 from cag_estimate.embedding_pipeline.router import router as embeddings_router
+from cag_estimate.embedding_pipeline.search_router import router as search_router
 from cag_estimate.logging_config import configure_logging
 from cag_estimate.routers import estimations, sessions
 
@@ -31,9 +33,10 @@ class HealthStatus(BaseModel):
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Configure logging once at startup from ``Settings.log_level``."""
+    """Configure logging at startup and release the database engine at shutdown."""
     configure_logging(get_settings().log_level)
     yield
+    await dispose_async_engine()
 
 
 # Create FastAPI app with detailed documentation
@@ -60,6 +63,7 @@ app.add_middleware(
 app.include_router(estimations.router)
 app.include_router(sessions.router)
 app.include_router(embeddings_router)
+app.include_router(search_router)
 
 
 @app.get("/health", response_model=HealthStatus, status_code=200)

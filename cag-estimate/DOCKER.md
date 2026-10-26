@@ -105,9 +105,17 @@ docker-compose build --no-cache api
   - Port: `6379:6379`
   - Data volume: `cag-estimate-redis-data`
   - Used for the exact cache and the semantic (vector) cache
+- **Service:** `pgvector` (container `estimator-pgvector`, session 8)
+  - Image: `pgvector/pgvector:pg16` (PostgreSQL 16.15, extension `vector` 0.8.7); user, password and database all `estimator`
+  - Port: `5433:5432` (5433 so it does not clash with a local PostgreSQL on 5432)
+  - Data volume: `estimator-pgvector-data`
+  - Healthcheck: `pg_isready`
+  - Stores the `documents` and `chunks` tables for ingest and `/search`. Separate from the Rails `postgres` service, which is untouched
 - **Service:** `api`
   - Port: `8000:8000`
-  - Waits for `redis` to be healthy; `REDIS_URL` is fixed to `redis://redis:6379/0`
+  - Waits for `redis` and `pgvector` to be healthy; `REDIS_URL` is fixed to `redis://redis:6379/0`
+  - `DATABASE_URL=postgresql+asyncpg://estimator:estimator@pgvector:5432/estimator` by default (overridable through `.env` or the environment)
+  - Bind-mounts `./alembic` and `./alembic.ini` read-only, so migrations run inside the container
   - Health checks enabled
   - Auto-restart on failure
   - Network isolation
@@ -126,6 +134,27 @@ docker-compose build --no-cache api
   - Does not depend on `api` at startup; estimates fail with a 503 message until the API is up
 
 This image (`redis-stack`) bundles RedisInsight on port 8001, but the compose file only publishes `6379`. To use the RedisInsight UI add `- "8001:8001"` to the `redis` ports.
+
+### pgvector and migrations
+
+Start the vector database with the API and Redis:
+```bash
+docker compose up -d pgvector redis api
+```
+
+Migrations are manual (the API does not run them at startup):
+```bash
+docker compose run --rm --no-deps api alembic upgrade head   # create the extension and tables
+docker compose run --rm --no-deps api alembic current
+docker compose run --rm --no-deps api alembic downgrade base # drops the tables, keeps the extension
+```
+
+The migration creates the `vector` extension, `documents`, `chunks` and the indexes `ix_documents_source_path`, `ix_chunks_document_id`, `ix_chunks_chunk_type` and `ix_chunks_metadata_gin` (GIN). There is no vector index. Inspect the schema:
+```bash
+docker compose exec pgvector psql -U estimator -d estimator -c "\d chunks"
+```
+
+From the host, the database is at `postgresql+asyncpg://estimator:estimator@localhost:5433/estimator`. After changing dependencies rebuild only the API: `docker compose up -d --build --no-deps api`. Data persists in `estimator-pgvector-data`; `docker compose down -v` erases it.
 
 ### Rails web UI
 
@@ -301,6 +330,7 @@ kompose convert -f docker-compose.yml
 
 - **redis** - Redis Stack (exact cache + semantic cache)
 - **api** - CAG Estimate FastAPI application
+- **pgvector** - PostgreSQL 16 + pgvector for documents, chunks and `/search` (host port 5433)
 - **postgres** - PostgreSQL 16 for the Rails UI history (not published to the host)
 - **estimator-web** - Rails UI on port 3000
 

@@ -19,4 +19,4 @@ Run date: 2026-10-18. Model: `text-embedding-3-small`, default dimension (1536).
 
 ## Sample ingest (same run)
 
-`POST /embeddings/ingest` with `data/budgets_sample.json` (15 budgets): 52 chunks (one per component), 52 unique `BUD-...::...` ids, 1536-dimension vectors, 4,126 tokens, estimated cost $0.0000825.
+The session 7 run was a historical in-memory result (52 chunks, 4,126 tokens, $0.0000825). Since session 8 the same corpus is persisted (15 documents, 52 chunks) and queried through `/search`; see `output_examples.txt` at the project root.

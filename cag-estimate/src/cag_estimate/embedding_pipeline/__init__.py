@@ -1,4 +1,4 @@
-"""Embedding pipeline: turns historical budgets into embedded, filterable chunks."""
+"""Embedding pipeline: turns historical budgets into embedded, stored and searchable chunks."""
 
 from cag_estimate.embedding_pipeline.chunker import (
     JSONStructuralChunker,
@@ -8,10 +8,14 @@ from cag_estimate.embedding_pipeline.chunker import (
 from cag_estimate.embedding_pipeline.embedder import (
     EMBEDDING_PRICE_PER_M_TOKENS_USD,
     OpenAIEmbedder,
-    build_ingest_stats,
     cosine_similarity,
     estimate_cost_usd,
 )
+from cag_estimate.embedding_pipeline.ingest_service import (
+    DuplicateDocumentError,
+    RagIngestService,
+)
+from cag_estimate.embedding_pipeline.retriever import SearchEmbeddingError, SemanticRetriever
 from cag_estimate.embedding_pipeline.schemas import (
     Budget,
     BudgetComponent,
@@ -21,7 +25,9 @@ from cag_estimate.embedding_pipeline.schemas import (
     EmbeddedChunk,
     IngestRequest,
     IngestResponse,
-    IngestStats,
+    SearchRequest,
+    SearchResponse,
+    SearchResultItem,
     Sector,
 )
 
@@ -32,16 +38,21 @@ __all__ = [
     "Chunk",
     "ClientMetadata",
     "Complexity",
+    "DuplicateDocumentError",
     "EmbeddedChunk",
     "IngestRequest",
     "IngestResponse",
-    "IngestStats",
     "JSONStructuralChunker",
     "OpenAIEmbedder",
+    "RagIngestService",
+    "SearchEmbeddingError",
+    "SearchRequest",
+    "SearchResponse",
+    "SearchResultItem",
     "Sector",
+    "SemanticRetriever",
     "TiktokenCounter",
     "TokenCounter",
-    "build_ingest_stats",
     "cosine_similarity",
     "estimate_cost_usd",
 ]

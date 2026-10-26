@@ -20,6 +20,30 @@ services:
       - "com.cag-estimate.service=cache"
       - "com.cag-estimate.description=Exact-match and semantic (RediSearch) cache for LLM responses"
 
+  pgvector:
+    image: pgvector/pgvector:pg16
+    container_name: estimator-pgvector
+    environment:
+      POSTGRES_DB: estimator
+      POSTGRES_USER: estimator
+      POSTGRES_PASSWORD: estimator
+    ports:
+      # Host 5433 on purpose: 5432 may be taken by a local Postgres.
+      - "5433:5432"
+    volumes:
+      - pgvector-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U estimator -d estimator"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - cag-network
+    labels:
+      - "com.cag-estimate.service=vector-store"
+      - "com.cag-estimate.description=PostgreSQL with pgvector for persisted document embeddings"
+
   api:
     build:
       context: .
@@ -55,10 +79,13 @@ services:
       - SEMANTIC_CACHE_THRESHOLD=${SEMANTIC_CACHE_THRESHOLD:-0.90}
       - SEMANTIC_CACHE_TTL=${SEMANTIC_CACHE_TTL:-86400}
       - SEMANTIC_CACHE_LOG_ONLY=${SEMANTIC_CACHE_LOG_ONLY:-false}
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://estimator:estimator@pgvector:5432/estimator}
       - APP_ENV=${APP_ENV:-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       redis:
+        condition: service_healthy
+      pgvector:
         condition: service_healthy
     volumes:
       # For development: mount source code for hot reload
@@ -68,6 +95,9 @@ services:
       # Used by scripts/compare.py and the sample data
       - ./scripts:/app/scripts:ro
       - ./data:/app/data:ro
+      # Alembic migrations (read-only: version files are created on the host)
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -140,6 +170,8 @@ networks:
 volumes:
   redis-data:
     name: cag-estimate-redis-data
+  pgvector-data:
+    name: estimator-pgvector-data
   estimator-web-pg-data:
     name: estimator-web-pg-data
   estimator-web-bundle:

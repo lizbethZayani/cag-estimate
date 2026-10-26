@@ -11,7 +11,6 @@ from structlog.testing import capture_logs
 from cag_estimate.embedding_pipeline.chunker import EMBEDDING_MODEL
 from cag_estimate.embedding_pipeline.embedder import (
     OpenAIEmbedder,
-    build_ingest_stats,
     cosine_similarity,
     estimate_cost_usd,
 )
@@ -248,15 +247,6 @@ def test_estimate_cost_usd() -> None:
     assert estimate_cost_usd(1_000_000) == 0.02
     assert estimate_cost_usd(0) == 0.0
     assert estimate_cost_usd(123) == round(123 / 1_000_000 * 0.02, 8)
-
-
-def test_build_ingest_stats() -> None:
-    chunks = [EmbeddedChunk(**c.model_dump(), embedding=[0.1]) for c in make_chunks(4)]
-    stats = build_ingest_stats(2, chunks)
-    assert stats.total_budgets == 2
-    assert stats.total_chunks == 4
-    assert stats.total_tokens == 40
-    assert stats.estimated_cost_usd == estimate_cost_usd(40)
 
 
 def test_cosine_identical_orthogonal_opposite() -> None:

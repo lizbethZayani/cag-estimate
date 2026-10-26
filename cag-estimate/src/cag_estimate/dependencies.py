@@ -10,9 +10,11 @@ from openai import OpenAI
 from cag_estimate.cache.semantic import EstimationSemanticCache
 from cag_estimate.cache.vectorizer import LazyOpenAIVectorizer
 from cag_estimate.config import get_settings
+from cag_estimate.db.session import get_async_session_factory
 from cag_estimate.embedding_pipeline.chunker import JSONStructuralChunker
 from cag_estimate.embedding_pipeline.embedder import OpenAIEmbedder
-from cag_estimate.embedding_pipeline.service import EmbeddingIngestService
+from cag_estimate.embedding_pipeline.ingest_service import RagIngestService
+from cag_estimate.embedding_pipeline.retriever import SemanticRetriever
 from cag_estimate.prompts import render_system_prompt
 from cag_estimate.services.cache import get_cache
 from cag_estimate.services.critic import Critic
@@ -47,8 +49,8 @@ def build_moderation_client() -> Any | None:
         return None
 
 
-def build_embedding_service() -> EmbeddingIngestService | None:
-    """Ingest service, or None when no OpenAI key is set.
+def build_embedder() -> OpenAIEmbedder | None:
+    """Embedder, or None when no OpenAI key is set or the client cannot be built.
 
     The client disables the SDK's own retries (``max_retries=0``) so the retry policy
     of ``OpenAIEmbedder`` is the only one and waits are not multiplied.
@@ -59,17 +61,55 @@ def build_embedding_service() -> EmbeddingIngestService | None:
         return None
     try:
         client = OpenAI(api_key=settings.openai_api_key, max_retries=0)
-    except Exception as exc:  # noqa: BLE001 - the endpoint answers 503, fail soft
+    except Exception as exc:  # noqa: BLE001 - the endpoints answer 503, fail soft
         log.warning("embedding_service_unavailable", error_type=type(exc).__name__)
         return None
-    embedder = OpenAIEmbedder(client, model=settings.embedding_model)
-    return EmbeddingIngestService(JSONStructuralChunker(), embedder)
+    return OpenAIEmbedder(client, model=settings.embedding_model)
 
 
 @lru_cache
-def get_embedding_service() -> EmbeddingIngestService | None:
+def get_embedder() -> OpenAIEmbedder | None:
+    """Process-wide embedder (None when not configured)."""
+    return build_embedder()
+
+
+def _get_embedder_with_database() -> OpenAIEmbedder | None:
+    """The embedder, or None when it or ``DATABASE_URL`` is missing (RAG services need both)."""
+    embedder = get_embedder()
+    if embedder is None:
+        return None
+    if get_settings().database_url is None:
+        log.warning("embedding_service_unavailable", reason="no_database_url")
+        return None
+    return embedder
+
+
+def build_rag_ingest_service() -> RagIngestService | None:
+    """Persisting ingest service, or None without an embedder or ``DATABASE_URL``."""
+    embedder = _get_embedder_with_database()
+    if embedder is None:
+        return None
+    return RagIngestService(get_async_session_factory(), JSONStructuralChunker(), embedder)
+
+
+@lru_cache
+def get_rag_ingest_service() -> RagIngestService | None:
     """Process-wide ingest service (None when not configured)."""
-    return build_embedding_service()
+    return build_rag_ingest_service()
+
+
+def build_semantic_retriever() -> SemanticRetriever | None:
+    """Semantic retriever, or None without an embedder or ``DATABASE_URL``."""
+    embedder = _get_embedder_with_database()
+    if embedder is None:
+        return None
+    return SemanticRetriever(get_async_session_factory(), embedder)
+
+
+@lru_cache
+def get_semantic_retriever() -> SemanticRetriever | None:
+    """Process-wide semantic retriever (None when not configured)."""
+    return build_semantic_retriever()
 
 
 def build_semantic_cache() -> EstimationSemanticCache | None:
