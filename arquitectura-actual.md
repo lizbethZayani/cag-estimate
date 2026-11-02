@@ -65,6 +65,10 @@ flowchart TB
   style ISLA_A fill:#f4f1ea,stroke:#9a8c6a
 ```
 
+**Mismo diagrama dibujado a mano:**
+
+![Arquitectura actual, dibujada a mano](images/diagrama-actual.jpg)
+
 **Nombres del ejercicio frente a nuestras carpetas** (no hay `ingest/` ni `storage/` literales):
 
 | Ejercicio | En nuestro repo |
@@ -271,5 +275,9 @@ flowchart TB
   classDef viejo fill:#eeeeee,stroke:#888,color:#333;
   class EP,ST2,ST,RW,RB viejo;
 ```
+
+**Mismo diagrama dibujado a mano:**
+
+![Propuesta de evolución, dibujada a mano](images/diagrama-evolucion.jpg)
 
 **Responsabilidades, datos y qué atacar primero.** El **extractor** lee la transcripción y devuelve una lista corta de necesidades (cada una con un texto breve) más el sector y lo que sigue sin decidir. El **constructor de consultas** convierte cada necesidad en una frase corta en inglés, el registro del corpus. La **recuperación multi-consulta** reutiliza el `/search` actual, una vez por necesidad, y descarta lo que no supera un umbral de similitud. El **agregador** agrupa los chunks por presupuesto padre y produce, por necesidad, horas de referencia y una etiqueta de cobertura (cubierta / débil / sin evidencia). El **constructor de contexto** empaqueta esa evidencia y los huecos dentro del prompt, y el **estimador** (el LLM que ya tenemos) genera la cifra citando de qué presupuestos sale, o diciendo "sin evidencia" cuando no la hay. Los datos que viajan son: texto → necesidades → consultas → chunks con distancia → horas y cobertura por necesidad → prompt → estimación con fuentes. **La pieza más crítica es el extractor de necesidades (junto con el constructor de consultas que lo sigue):** los fallos 1, 2 y 3 nacen de que hoy buscamos con la transcripción entera, y es lo único que permite medir cobertura "por necesidad"; todo lo que viene después hereda la calidad de esa lista, y en el trace las consultas por necesidad recuperaron justo lo que la transcripción completa escondía (pago, panel, correo).
