@@ -34,11 +34,11 @@ Retriever = Annotated[SemanticRetriever, Depends(_require_retriever)]
 
 @router.post("/search", response_model=SearchResponse)
 async def search(request: SearchRequest, retriever: Retriever) -> SearchResponse:
-    """Embed the query and return the ``k`` chunks nearest by cosine distance.
+    """Embed the query and return the ``k`` best chunks (vector or hybrid, optionally reranked).
 
     Responses:
-        200: ``query``, ``k``, ``search_time_ms`` and ``results`` ordered by ascending
-            distance (empty when nothing is stored).
+        200: ``query``, ``k``, ``search_time_ms``, the effective ``search_mode`` and
+            ``reranked`` flag, and ``results`` best first (empty when nothing is stored).
         422: invalid body (FastAPI validation).
         502: the embeddings API failed (or any other unexpected error, as this repo
             maps unexpected failures to 502); the body is generic, details go to the logs.

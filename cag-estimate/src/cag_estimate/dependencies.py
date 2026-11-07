@@ -104,7 +104,16 @@ def build_semantic_retriever() -> SemanticRetriever | None:
     embedder = _get_embedder_with_database()
     if embedder is None:
         return None
-    return SemanticRetriever(get_async_session_factory(), embedder)
+    settings = get_settings()
+    return SemanticRetriever(
+        get_async_session_factory(),
+        embedder,
+        default_search_mode=settings.search_mode,
+        default_rerank=settings.rerank_enabled,
+        recall_k=settings.recall_k,
+        rrf_k=settings.rrf_k,
+        reranker=get_reranker(),
+    )
 
 
 @lru_cache
