@@ -80,6 +80,13 @@ services:
       - SEMANTIC_CACHE_TTL=${SEMANTIC_CACHE_TTL:-86400}
       - SEMANTIC_CACHE_LOG_ONLY=${SEMANTIC_CACHE_LOG_ONLY:-false}
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://estimator:estimator@pgvector:5432/estimator}
+      - SEARCH_MODE=${SEARCH_MODE:-vector}
+      - RERANK_ENABLED=${RERANK_ENABLED:-false}
+      - RERANK_MODEL=${RERANK_MODEL:-cross-encoder/mmarco-mMiniLMv2-L12-H384-v1}
+      - RRF_K=${RRF_K:-60}
+      - RECALL_K=${RECALL_K:-50}
+      # Where the reranker model (~450 MB) is cached; backed by the hf-cache volume.
+      - HF_HOME=/home/appuser/.cache/huggingface
       - APP_ENV=${APP_ENV:-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
@@ -98,6 +105,8 @@ services:
       # Alembic migrations (read-only: version files are created on the host)
       - ./alembic:/app/alembic:ro
       - ./alembic.ini:/app/alembic.ini:ro
+      # Survives container recreation so the reranker model is downloaded once
+      - hf-cache:/home/appuser/.cache/huggingface
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -172,6 +181,8 @@ volumes:
     name: cag-estimate-redis-data
   pgvector-data:
     name: estimator-pgvector-data
+  hf-cache:
+    name: cag-estimate-hf-cache
   estimator-web-pg-data:
     name: estimator-web-pg-data
   estimator-web-bundle:
