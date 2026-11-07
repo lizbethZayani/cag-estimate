@@ -153,4 +153,27 @@ async def test_catalog_has_gin_but_no_vector_index(session_factory: SessionFacto
 
     assert extension == 1
     assert any("ix_chunks_metadata_gin" in d and "USING gin" in d for d in definitions)
+    assert any("ix_chunks_content_tsv" in d and "USING gin" in d for d in definitions)
     assert not any("hnsw" in d.lower() or "ivfflat" in d.lower() for d in definitions)
+
+
+async def test_content_tsv_is_generated_and_matches_a_text_query(
+    session_factory: SessionFactory,
+) -> None:
+    await seed(session_factory, [make_chunk("alpha", vector(1.0)), make_chunk("beta", None)])
+
+    async with session_factory() as session:
+        populated = await session.scalar(
+            text("SELECT count(*) FROM chunks WHERE content_tsv IS NOT NULL")
+        )
+        matches = (
+            await session.scalars(
+                text(
+                    "SELECT content FROM chunks "
+                    "WHERE content_tsv @@ plainto_tsquery('english', 'alpha')"
+                )
+            )
+        ).all()
+
+    assert populated == 2
+    assert matches == ["content alpha"]

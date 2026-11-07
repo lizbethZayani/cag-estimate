@@ -60,12 +60,28 @@ def test_upgrade_has_no_vector_index_and_no_unique_source_path(upgrade_sql: str)
     assert "UNIQUE INDEX ix_documents_source_path" not in upgrade_sql
 
 
+def test_upgrade_adds_the_generated_tsvector_column_and_its_gin_index(upgrade_sql: str) -> None:
+    assert "content_tsv" in upgrade_sql
+    assert "to_tsvector('english'" in upgrade_sql
+    assert "GENERATED ALWAYS AS" in upgrade_sql
+    assert "STORED" in upgrade_sql
+    assert "CREATE INDEX ix_chunks_content_tsv" in upgrade_sql
+    assert "ix_chunks_content_tsv ON chunks USING gin (content_tsv)" in upgrade_sql
+
+
 def test_downgrade_drops_the_tables() -> None:
-    sql = render_sql(lambda config: command.downgrade(config, "0001:base", sql=True))
+    sql = render_sql(lambda config: command.downgrade(config, "0002:base", sql=True))
 
     assert "DROP TABLE chunks" in sql
     assert "DROP TABLE documents" in sql
     assert "DROP EXTENSION" not in sql
+
+
+def test_downgrade_of_the_fts_revision_drops_only_the_index_and_the_column() -> None:
+    sql = render_sql(lambda config: command.downgrade(config, "0002:0001", sql=True))
+
+    assert sql.index("DROP INDEX ix_chunks_content_tsv") < sql.index("DROP COLUMN content_tsv")
+    assert "DROP TABLE" not in sql
 
 
 def test_alembic_ini_has_no_credentials() -> None:
