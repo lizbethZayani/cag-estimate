@@ -157,6 +157,34 @@ async def test_catalog_has_gin_but_no_vector_index(session_factory: SessionFacto
     assert not any("hnsw" in d.lower() or "ivfflat" in d.lower() for d in definitions)
 
 
+async def test_search_lexical_ranks_by_shared_terms_and_ignores_stopwords(
+    session_factory: SessionFactory,
+) -> None:
+    texts = {
+        "both": "online store with product catalog and card checkout flow",
+        "one": "product catalog browsing for a museum",
+        "none": "hospital patient scheduling and appointments",
+    }
+    chunks = [
+        EmbeddedChunk.model_construct(
+            chunk_id=name, text=text, metadata={}, token_count=4, embedding=None
+        )
+        for name, text in texts.items()
+    ]
+    await seed(session_factory, chunks)
+
+    async with session_factory() as session:
+        hits = await ChunkStore.search_lexical(
+            session, "Online store: product catalog, checkout!", 10
+        )
+        stopwords_only = await ChunkStore.search_lexical(session, "the and of with", 10)
+
+    assert [hit.content for hit in hits] == [texts["both"], texts["one"]]
+    assert all(hit.distance is None and hit.score is not None for hit in hits)
+    assert hits[0].score > hits[1].score
+    assert stopwords_only == []
+
+
 async def test_content_tsv_is_generated_and_matches_a_text_query(
     session_factory: SessionFactory,
 ) -> None:
