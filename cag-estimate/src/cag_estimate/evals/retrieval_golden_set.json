@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "queries": [
+    {
+      "id": "q1-ecommerce-store",
+      "query": "Online store for a gourmet food retailer: searchable product catalog, shopping cart with secure card checkout, order management with refunds, and a fast mobile storefront.",
+      "relevant_budget_ids": ["BUD-2024-005", "BUD-2024-006"],
+      "rationale": "005 has catalog, cart/checkout and storefront; 006 has split order management and dispute/refund handling; 003 (payments gateway) is the near-miss to avoid."
+    },
+    {
+      "id": "q2-fintech-compliance",
+      "query": "Fintech backend with strong customer authentication and regulatory compliance: open banking connectors, OAuth login for the mobile app, automated regulatory reporting and electronic signature of contracts.",
+      "relevant_budget_ids": ["BUD-2024-001", "BUD-2024-002"],
+      "rationale": "001 has OAuth and PSD2 connectors; 002 has regulatory reporting export and e-signature; 003 and 004 are same-sector near-misses."
+    },
+    {
+      "id": "q3-remote-care",
+      "query": "Remote care platform that ingests data from patients' wearable devices, alerts the care team through a clinical dashboard and offers video consultations integrated with hospital records over HL7/FHIR.",
+      "relevant_budget_ids": ["BUD-2024-009", "BUD-2024-010"],
+      "rationale": "009 has FHIR integration and telemedicine video; 010 has wearable ingestion, clinical alerting and the care team dashboard; 011 and 012 are same-sector near-misses and 013 (IoT telemetry) is a cross-sector near-miss."
+    },
+    {
+      "id": "q4-industrial-data",
+      "query": "Real-time sensor data pipeline for plants and utilities, with load forecasting and predictive maintenance models and an operations dashboard on top.",
+      "relevant_budget_ids": ["BUD-2024-013", "BUD-2024-015"],
+      "rationale": "013 has sensor telemetry, predictive maintenance and a SCADA dashboard; 015 has the smart meter data pipeline and load forecasting; 010 (wearable ingestion) is a cross-sector near-miss with similar tech."
+    },
+    {
+      "id": "q5-logistics",
+      "query": "Last-mile logistics software with route optimization for delivery vehicles, delivery slot booking for customers, real-time inventory sync and warehouse dock scheduling.",
+      "relevant_budget_ids": ["BUD-2024-007", "BUD-2024-014"],
+      "rationale": "007 has slot booking, route optimization and inventory sync; 014 has yard and dock scheduling and the warehouse core."
+    }
+  ]
+}
