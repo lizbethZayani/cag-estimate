@@ -156,6 +156,22 @@ docker compose exec pgvector psql -U estimator -d estimator -c "\d chunks"
 
 From the host, the database is at `postgresql+asyncpg://estimator:estimator@localhost:5433/estimator`. After changing dependencies rebuild only the API: `docker compose up -d --build --no-deps api`. Data persists in `estimator-pgvector-data`; `docker compose down -v` erases it.
 
+### Reranker (session 10)
+
+The optional cross-encoder reranker uses `sentence-transformers`, which pulls in torch, so the `api` image gets much heavier. Rebuild it once:
+```bash
+docker compose up -d --build --no-deps api
+```
+
+The model (about 450 MB, default `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`, set with `RERANK_MODEL`) is downloaded on first use into the named volume `hf-cache` (`cag-estimate-hf-cache`), mounted at `HF_HOME` (`/home/appuser/.cache/huggingface`). It survives container recreation but not `docker compose down -v`. The first reranked request is slow because it loads (and the first time downloads) the model.
+
+Check that the model loads and ranks correctly (exit code `0` ok, `1` the model failed to load or score, `2` wrong ranking):
+```bash
+docker compose exec api python scripts/verify_reranker.py
+```
+
+Related variables passed to the container: `SEARCH_MODE`, `RERANK_ENABLED`, `RERANK_MODEL`, `RRF_K`, `RECALL_K` (see the README section "Hybrid search and reranking").
+
 ### Rails web UI
 
 Start (or rebuild) the UI with its dependencies:
