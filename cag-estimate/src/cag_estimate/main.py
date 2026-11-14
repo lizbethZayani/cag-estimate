@@ -11,15 +11,18 @@ Access the interactive API documentation at /docs (Swagger UI) or /redoc (ReDoc)
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.middleware.base import RequestResponseEndpoint
+from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from cag_estimate.config import get_settings
 from cag_estimate.db.session import dispose_async_engine
 from cag_estimate.embedding_pipeline.router import router as embeddings_router
 from cag_estimate.embedding_pipeline.search_router import router as search_router
 from cag_estimate.logging_config import configure_logging
+from cag_estimate.request_context import REQUEST_ID_HEADER, resolve_request_id
 from cag_estimate.routers import estimations, sessions
 
 
@@ -58,6 +61,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def correlate_request(request: Request, call_next: RequestResponseEndpoint) -> Response:
+    """Bind a request id to every log event of the request and echo it back."""
+    request_id = resolve_request_id(request.headers.get(REQUEST_ID_HEADER))
+    bind_contextvars(request_id=request_id)
+    request.state.request_id = request_id
+    try:
+        response = await call_next(request)
+    finally:
+        unbind_contextvars("request_id")
+    response.headers[REQUEST_ID_HEADER] = request_id
+    return response
+
 
 # Include routers
 app.include_router(estimations.router)
