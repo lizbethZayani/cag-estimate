@@ -97,6 +97,8 @@ Paste the printed tables into `session10/RESULTS.md` (sections "Results" and "Pe
 | `eval_retrieval.py` aborts: "asked for ... reranked=True but the API applied ... reranked=False" | The reranker failed soft. Fix step 4 first, then rerun. |
 | Hybrid search errors or `content_tsv` does not exist | The migration was not applied: run step 2. |
 | `ModuleNotFoundError: cag_estimate` on the host | Use `PYTHONPATH=src uv run ...`. |
+| `verify_reranker.py` fails with `Permission denied: /home/appuser/.cache/huggingface/hub` | The `hf-cache` volume was created root-owned (before the Dockerfile created the directory for `appuser`). Rebuild the image, then recreate the empty volume: `docker compose rm -sf api && docker volume rm cag-estimate-hf-cache && docker compose up -d api`. |
+| `redis` fails with `Bind for 0.0.0.0:6379 failed: port is already allocated` | Another container (for example `cag-estimate-redis-test`) already owns the host port. `/search` does not need Redis: start only the API with `docker compose up -d --no-deps api`. |
 
 ## Automated tests
 

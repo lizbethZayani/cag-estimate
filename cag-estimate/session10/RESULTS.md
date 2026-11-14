@@ -1,6 +1,6 @@
 # Session 10: results (hybrid search and reranking)
 
-Template: the numbers are pasted from the real run of `scripts/eval_retrieval.py` (see `MANUAL_VALIDATION.md`).
+The numbers below are pasted from a real run of `scripts/eval_retrieval.py` (see `MANUAL_VALIDATION.md`) on 2026-11-14: 5 queries, 3 timed runs after 1 discarded warm-up, `k=5`, reranker on CPU inside the `api` container. Raw measurements: `session10/eval_raw.json`.
 
 ## Setup
 
@@ -36,32 +36,35 @@ Configurations:
 
 ## Results
 
-PENDING: paste the table printed by scripts/eval_retrieval.py
-
 | Config | Search | Reranking | Precision@5 (mean) | Latency median (ms) | Server search_time median (ms) |
 |---|---|---|---|---|---|
-| A | vector | off | | | |
-| B | hybrid | off | | | |
-| C | vector | on | | | |
-| D | hybrid | on | | | |
+| A | vector | off | 0.92 | 219.1 | 215.0 |
+| B | hybrid | off | 1.00 | 219.5 | 216.0 |
+| C | vector | on | 0.92 | 3835.2 | 3831.0 |
+| D | hybrid | on | 0.92 | 3833.7 | 3828.0 |
 
 ## Per-query results
 
-PENDING: paste the table printed by scripts/eval_retrieval.py
-
 | Query | A | B | C | D |
 |---|---|---|---|---|
-| q1-ecommerce-store | | | | |
-| q2-fintech-compliance | | | | |
-| q3-remote-care | | | | |
-| q4-industrial-data | | | | |
-| q5-logistics | | | | |
+| q1-ecommerce-store | 0.60 | 1.00 | 0.60 | 0.60 |
+| q2-fintech-compliance | 1.00 | 1.00 | 1.00 | 1.00 |
+| q3-remote-care | 1.00 | 1.00 | 1.00 | 1.00 |
+| q4-industrial-data | 1.00 | 1.00 | 1.00 | 1.00 |
+| q5-logistics | 1.00 | 1.00 | 1.00 | 1.00 |
+
+Only q1 separates the configurations. Top 5 for q1 (relevant budgets: 005 and 006):
+
+| Config | Top 5 chunks (budget/component) | Relevant |
+|---|---|---|
+| A | 005/CART-002, 005/CATALOG-001, **007/INV-003**, 005/STORE-004, **007/SLOT-001** | 3 of 5 |
+| B | 005/CART-002, 005/CATALOG-001, 005/STORE-004, 005/RECO-003, 006/ORDER-002 | 5 of 5 |
+| C and D | 005/CATALOG-001, 005/CART-002, 005/RECO-003, **008/RESALE-003**, **007/SLOT-001** | 3 of 5 |
 
 ## Conclusions
 
-PENDING: answer with the real numbers once the run is done.
+**Which configuration?** B, hybrid without reranking. It has the best precision@5 (1.00 against 0.92 for the other three) at the same latency as plain vector search (about 220 ms). On q1 the keyword branch is what helps: terms such as "order management" bring `006/ORDER-002` and `005/RECO-003` into the top 5, while vector search drifts to the grocery-delivery budget (007).
 
-1. Which configuration would you use in the project, and why?
-2. Does the relevance gain from reranking justify its latency in this use case?
+**Does reranking pay off here?** No. It multiplies latency by about 17 (3.8 s against 0.22 s on CPU) and gains nothing: C equals A (0.92) and D is worse than B (0.92 against 1.00), because the cross-encoder pushed `008/RESALE-003` and `007/SLOT-001` above the better 005 and 006 chunks on q1. C and D return identical results because the corpus has only 52 chunks, so the top-50 recall pool is almost the whole corpus: "recall then rerank" degenerates into reranking everything, and the search mode stops mattering. Its cost is also more than latency: the `api` image grew from 1.93 GB to 17.9 GB (torch), the model is about 450 MB, and the first reranked request took 13 s while the model loaded.
 
-Remember that the cost of reranking is not only latency: it also adds the torch weight to the Docker image and a model download of about 450 MB.
+**Caveats.** The golden set is small: 5 queries, and 4 of them score 1.00 under every configuration, so the whole difference comes from q1. Precision is measured on chunks with 2 relevant budgets per query, and the golden set is mine, so these numbers are indicative, not significant. I would revisit reranking with a corpus of thousands of chunks (where a top-50 pool is selective), a harder golden set, and a lighter or GPU-backed model, before paying its cost.
