@@ -1,0 +1,306 @@
+{
+  "k": 5,
+  "runs": 3,
+  "measurements": [
+    {
+      "config": "A",
+      "query_id": "q1-ecommerce-store",
+      "precision": 0.6,
+      "latencies_ms": [
+        575.9340419899672,
+        213.63787504378706,
+        311.01408309768885
+      ],
+      "server_times_ms": [
+        571,
+        209,
+        306
+      ]
+    },
+    {
+      "config": "A",
+      "query_id": "q2-fintech-compliance",
+      "precision": 1.0,
+      "latencies_ms": [
+        194.86325001344085,
+        228.78483403474092,
+        435.4317500256002
+      ],
+      "server_times_ms": [
+        190,
+        224,
+        430
+      ]
+    },
+    {
+      "config": "A",
+      "query_id": "q3-remote-care",
+      "precision": 1.0,
+      "latencies_ms": [
+        200.3995421109721,
+        325.7440839661285,
+        307.06450005527586
+      ],
+      "server_times_ms": [
+        195,
+        321,
+        302
+      ]
+    },
+    {
+      "config": "A",
+      "query_id": "q4-industrial-data",
+      "precision": 1.0,
+      "latencies_ms": [
+        314.7954159649089,
+        207.7044170582667,
+        213.18162500392646
+      ],
+      "server_times_ms": [
+        311,
+        204,
+        208
+      ]
+    },
+    {
+      "config": "A",
+      "query_id": "q5-logistics",
+      "precision": 1.0,
+      "latencies_ms": [
+        201.20224996935576,
+        198.54208291508257,
+        219.06604210380465
+      ],
+      "server_times_ms": [
+        196,
+        195,
+        215
+      ]
+    },
+    {
+      "config": "B",
+      "query_id": "q1-ecommerce-store",
+      "precision": 1.0,
+      "latencies_ms": [
+        196.06129196472466,
+        331.17829205002636,
+        218.72549992986023
+      ],
+      "server_times_ms": [
+        193,
+        328,
+        214
+      ]
+    },
+    {
+      "config": "B",
+      "query_id": "q2-fintech-compliance",
+      "precision": 1.0,
+      "latencies_ms": [
+        303.92312491312623,
+        321.2088330183178,
+        230.4425420006737
+      ],
+      "server_times_ms": [
+        300,
+        316,
+        225
+      ]
+    },
+    {
+      "config": "B",
+      "query_id": "q3-remote-care",
+      "precision": 1.0,
+      "latencies_ms": [
+        278.86416704859585,
+        193.46966606099159,
+        219.49083299841732
+      ],
+      "server_times_ms": [
+        274,
+        189,
+        216
+      ]
+    },
+    {
+      "config": "B",
+      "query_id": "q4-industrial-data",
+      "precision": 1.0,
+      "latencies_ms": [
+        236.10733391251415,
+        185.50437502563,
+        205.89329104404896
+      ],
+      "server_times_ms": [
+        232,
+        181,
+        201
+      ]
+    },
+    {
+      "config": "B",
+      "query_id": "q5-logistics",
+      "precision": 1.0,
+      "latencies_ms": [
+        229.84354197978973,
+        185.82058302126825,
+        195.48187498003244
+      ],
+      "server_times_ms": [
+        225,
+        181,
+        191
+      ]
+    },
+    {
+      "config": "C",
+      "query_id": "q1-ecommerce-store",
+      "precision": 0.6,
+      "latencies_ms": [
+        3629.826832911931,
+        3835.1736249169335,
+        3659.0507079381496
+      ],
+      "server_times_ms": [
+        3625,
+        3831,
+        3655
+      ]
+    },
+    {
+      "config": "C",
+      "query_id": "q2-fintech-compliance",
+      "precision": 1.0,
+      "latencies_ms": [
+        3807.5858750380576,
+        4054.215084062889,
+        3873.3597920509055
+      ],
+      "server_times_ms": [
+        3803,
+        4047,
+        3867
+      ]
+    },
+    {
+      "config": "C",
+      "query_id": "q3-remote-care",
+      "precision": 1.0,
+      "latencies_ms": [
+        3771.1915830150247,
+        3895.028500002809,
+        3986.2447089981288
+      ],
+      "server_times_ms": [
+        3767,
+        3891,
+        3980
+      ]
+    },
+    {
+      "config": "C",
+      "query_id": "q4-industrial-data",
+      "precision": 1.0,
+      "latencies_ms": [
+        3679.746458074078,
+        3847.7987080113962,
+        3559.935332974419
+      ],
+      "server_times_ms": [
+        3674,
+        3844,
+        3556
+      ]
+    },
+    {
+      "config": "C",
+      "query_id": "q5-logistics",
+      "precision": 1.0,
+      "latencies_ms": [
+        3957.7495419653133,
+        4099.843083997257,
+        3780.2177920239046
+      ],
+      "server_times_ms": [
+        3953,
+        4095,
+        3776
+      ]
+    },
+    {
+      "config": "D",
+      "query_id": "q1-ecommerce-store",
+      "precision": 0.6,
+      "latencies_ms": [
+        3688.074166071601,
+        3753.1203750986606,
+        3817.9640830494463
+      ],
+      "server_times_ms": [
+        3684,
+        3748,
+        3813
+      ]
+    },
+    {
+      "config": "D",
+      "query_id": "q2-fintech-compliance",
+      "precision": 1.0,
+      "latencies_ms": [
+        3833.674415946007,
+        3823.757917038165,
+        4007.4369590729475
+      ],
+      "server_times_ms": [
+        3828,
+        3820,
+        4003
+      ]
+    },
+    {
+      "config": "D",
+      "query_id": "q3-remote-care",
+      "precision": 1.0,
+      "latencies_ms": [
+        3880.75045903679,
+        4032.394374953583,
+        3835.0788339739665
+      ],
+      "server_times_ms": [
+        3876,
+        4027,
+        3830
+      ]
+    },
+    {
+      "config": "D",
+      "query_id": "q4-industrial-data",
+      "precision": 1.0,
+      "latencies_ms": [
+        3628.646833007224,
+        3558.310208027251,
+        3805.247833020985
+      ],
+      "server_times_ms": [
+        3624,
+        3554,
+        3800
+      ]
+    },
+    {
+      "config": "D",
+      "query_id": "q5-logistics",
+      "precision": 1.0,
+      "latencies_ms": [
+        4204.277458949946,
+        4359.729708987288,
+        4013.9725831104442
+      ],
+      "server_times_ms": [
+        4199,
+        4355,
+        4006
+      ]
+    }
+  ]
+}

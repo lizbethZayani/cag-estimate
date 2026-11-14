@@ -696,7 +696,49 @@ Other decisions:
 
 **Docker and migrations.** The `pgvector` service (`pgvector/pgvector:pg16`, extension 0.8.7, PostgreSQL 16.15) listens on host port 5433 and is separate from the Rails `postgres`; see [`DOCKER.md`](DOCKER.md). Migrations are manual: `docker compose run --rm --no-deps api alembic upgrade head` (also `alembic current`, `alembic downgrade base`). Downgrade drops the tables and keeps the `vector` extension.
 
-**Out of scope:** vector indexes (HNSW/IVFFlat), metadata filters, hybrid search, parameter tuning.
+**Out of scope:** vector indexes (HNSW/IVFFlat), metadata filters, parameter tuning. Hybrid search and reranking were added in session 10 (next section).
+
+## Hybrid search and reranking
+
+Session 10 extends `POST /search` with a lexical branch, rank fusion and an optional cross-encoder. The corpus and the golden set are **English** (the brief assumed Spanish), hence the `english` text search configuration.
+
+**What was added**
+
+- **Full-text column.** Migration `alembic/versions/0002_hybrid_search_fts.py` adds `chunks.content_tsv`, a stored generated column `to_tsvector('english', content)`, with the GIN index `ix_chunks_content_tsv`. Existing rows are filled by the migration; no re-ingest is needed.
+- **Lexical branch.** An OR query over the sanitized query tokens (lowercase alphanumerics, `to_tsquery('english', 'a | b | c')`), ranked by `ts_rank_cd`. `plainto_tsquery` is not used because it ANDs every term, so a long project description would match nothing.
+- **Reciprocal Rank Fusion.** The vector and lexical rankings are merged with `score = sum(1 / (rrf_k + rank))` (rank is 1-based, `RRF_K` default 60).
+- **Optional rerank.** A cross-encoder rescores the recalled candidates: `RECALL_K` (default 50) candidates are recalled, then the top `k` of the request are returned. The model loads lazily on first use.
+
+**How to switch it.** Defaults come from the environment (passed to the `api` container by `docker-compose.yml`); each request can override the first two:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SEARCH_MODE` | `vector` | `vector` or `hybrid` |
+| `RERANK_ENABLED` | `false` | rerank by default |
+| `RERANK_MODEL` | `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` | cross-encoder (~450 MB download) |
+| `RRF_K` | `60` | RRF smoothing constant |
+| `RECALL_K` | `50` | candidates recalled before reranking |
+
+The body accepts optional `search_mode` (`vector` or `hybrid`) and `rerank` (boolean); when omitted the defaults apply. The response echoes the **effective** `search_mode` and `reranked`, and each result has `distance` (null for a lexical-only hit) and `score` (rerank score, RRF score for hybrid without rerank, null for plain vector). Reranking **fails soft**: if the model cannot load or score, the API returns the un-reranked order with `reranked: false`, so always check `reranked`.
+
+The four configurations measured in session 10:
+
+```bash
+# A: vector
+curl -s -X POST http://localhost:8000/search -H "Content-Type: application/json" \
+  -d '{"query": "online store with card checkout", "k": 5, "search_mode": "vector", "rerank": false}'
+# B: hybrid
+curl -s -X POST http://localhost:8000/search -H "Content-Type: application/json" \
+  -d '{"query": "online store with card checkout", "k": 5, "search_mode": "hybrid", "rerank": false}'
+# C: vector + rerank
+curl -s -X POST http://localhost:8000/search -H "Content-Type: application/json" \
+  -d '{"query": "online store with card checkout", "k": 5, "search_mode": "vector", "rerank": true}'
+# D: hybrid + rerank
+curl -s -X POST http://localhost:8000/search -H "Content-Type: application/json" \
+  -d '{"query": "online store with card checkout", "k": 5, "search_mode": "hybrid", "rerank": true}'
+```
+
+The reranker needs a heavier image and a model download: see [`DOCKER.md`](DOCKER.md). To reproduce and measure, follow [`session10/MANUAL_VALIDATION.md`](session10/MANUAL_VALIDATION.md); the comparison is written up in [`session10/RESULTS.md`](session10/RESULTS.md).
 
 ## Web UI (Rails)
 

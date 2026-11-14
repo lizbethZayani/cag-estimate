@@ -94,8 +94,9 @@ def ingest(client: httpx.Client, budgets: list[dict[str, Any]], data_path: str) 
 
 def format_result(rank: int, hit: dict[str, Any]) -> str:
     snippet = " ".join(str(hit["content"]).split())[:SNIPPET_CHARS]
+    distance = "n/a" if hit["distance"] is None else f"{hit['distance']:.4f}"
     return (
-        f"  {rank}. chunk_id={hit['chunk_id']} distance={hit['distance']:.4f} "
+        f"  {rank}. chunk_id={hit['chunk_id']} distance={distance} "
         f"type={hit['chunk_type']} | {snippet}"
     )
 

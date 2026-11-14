@@ -41,8 +41,11 @@ COPY . .
 # Install the package in development mode
 RUN pip install -e .
 
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Create non-root user for security. The Hugging Face cache directory must exist and belong
+# to appuser in the image: a named volume mounted there inherits that ownership on first use.
+RUN useradd -m -u 1000 appuser \
+    && mkdir -p /home/appuser/.cache/huggingface \
+    && chown -R appuser:appuser /app /home/appuser/.cache
 USER appuser
 
 # Health check

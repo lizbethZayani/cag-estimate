@@ -14,6 +14,7 @@ from cag_estimate.db.session import get_async_session_factory
 from cag_estimate.embedding_pipeline.chunker import JSONStructuralChunker
 from cag_estimate.embedding_pipeline.embedder import OpenAIEmbedder
 from cag_estimate.embedding_pipeline.ingest_service import RagIngestService
+from cag_estimate.embedding_pipeline.reranker import CrossEncoderReranker
 from cag_estimate.embedding_pipeline.retriever import SemanticRetriever
 from cag_estimate.prompts import render_system_prompt
 from cag_estimate.services.cache import get_cache
@@ -103,13 +104,37 @@ def build_semantic_retriever() -> SemanticRetriever | None:
     embedder = _get_embedder_with_database()
     if embedder is None:
         return None
-    return SemanticRetriever(get_async_session_factory(), embedder)
+    settings = get_settings()
+    return SemanticRetriever(
+        get_async_session_factory(),
+        embedder,
+        default_search_mode=settings.search_mode,
+        default_rerank=settings.rerank_enabled,
+        recall_k=settings.recall_k,
+        rrf_k=settings.rrf_k,
+        reranker=get_reranker(),
+    )
 
 
 @lru_cache
 def get_semantic_retriever() -> SemanticRetriever | None:
     """Process-wide semantic retriever (None when not configured)."""
     return build_semantic_retriever()
+
+
+def build_reranker() -> CrossEncoderReranker:
+    """Unloaded reranker; the model loads on first use.
+
+    Never gated by ``RERANK_ENABLED``: that flag only sets the default, and a per-request
+    ``rerank=true`` must work even when it is false. Construction is free.
+    """
+    return CrossEncoderReranker(get_settings().rerank_model)
+
+
+@lru_cache
+def get_reranker() -> CrossEncoderReranker:
+    """Process-wide reranker (the loaded model is shared across requests)."""
+    return build_reranker()
 
 
 def build_semantic_cache() -> EstimationSemanticCache | None:

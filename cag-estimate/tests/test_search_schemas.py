@@ -41,12 +41,21 @@ def test_response_serialises_the_documented_shape():
         metadata={"year": 2024},
     )
 
-    response = SearchResponse(query="oauth", k=5, search_time_ms=123, results=[item])
+    response = SearchResponse(
+        query="oauth",
+        k=5,
+        search_time_ms=123,
+        search_mode="vector",
+        reranked=False,
+        results=[item],
+    )
 
     assert response.model_dump() == {
         "query": "oauth",
         "k": 5,
         "search_time_ms": 123,
+        "search_mode": "vector",
+        "reranked": False,
         "results": [
             {
                 "chunk_id": 17,
@@ -54,7 +63,52 @@ def test_response_serialises_the_documented_shape():
                 "chunk_type": "budget_component",
                 "content": "OAuth backend",
                 "distance": 0.2314,
+                "score": None,
                 "metadata": {"year": 2024},
             }
         ],
     }
+
+
+def test_mode_and_rerank_default_to_none_meaning_the_configured_default():
+    request = SearchRequest(query="x")
+
+    assert request.search_mode is None
+    assert request.rerank is None
+
+
+@pytest.mark.parametrize("mode", ["vector", "hybrid"])
+def test_known_search_modes_are_accepted(mode):
+    request = SearchRequest(query="x", search_mode=mode, rerank=True)
+
+    assert (request.search_mode, request.rerank) == (mode, True)
+
+
+@pytest.mark.parametrize("mode", ["lexical", "", "HYBRID"])
+def test_unknown_search_modes_are_rejected(mode):
+    with pytest.raises(ValidationError):
+        SearchRequest(query="x", search_mode=mode)
+
+
+def test_a_lexical_only_item_has_no_distance_and_carries_a_score():
+    item = SearchResultItem(
+        chunk_id=1,
+        document_id=1,
+        chunk_type="c",
+        content="x",
+        distance=None,
+        score=0.5,
+        metadata={},
+    )
+
+    assert item.distance is None
+    assert item.score == 0.5
+
+
+def test_response_echoes_the_effective_mode_and_rerank_flag():
+    response = SearchResponse(
+        query="q", k=1, search_time_ms=1, search_mode="hybrid", reranked=True, results=[]
+    )
+
+    dumped = response.model_dump()
+    assert (dumped["search_mode"], dumped["reranked"]) == ("hybrid", True)

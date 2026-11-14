@@ -167,6 +167,12 @@ def test_prints_headers_ranked_lines_and_search_time(script: ModuleType, data_fi
     assert "search_time_ms=7" in out
 
 
+def test_a_hit_without_distance_prints_n_a(script: ModuleType) -> None:
+    line = script.format_result(1, {**_hit(1), "distance": None})
+
+    assert line.startswith("  1. chunk_id=1 distance=n/a type=component | ")
+
+
 def test_long_content_is_truncated_to_120_chars(script: ModuleType, data_file: Path) -> None:
     api = Api(results=[_hit(1, "x" * 500)])
 

@@ -42,7 +42,14 @@ class FakeRetriever:
             )
             for position in range(self.results)
         ]
-        return SearchResponse(query=request.query, k=request.k, search_time_ms=123, results=items)
+        return SearchResponse(
+            query=request.query,
+            k=request.k,
+            search_time_ms=123,
+            search_mode=request.search_mode or "vector",
+            reranked=bool(request.rerank),
+            results=items,
+        )
 
 
 @pytest.fixture
@@ -72,6 +79,8 @@ async def test_search_returns_the_documented_shape(client, retriever):
         "query": "oauth",
         "k": 3,
         "search_time_ms": 123,
+        "search_mode": "vector",
+        "reranked": False,
         "results": [
             {
                 "chunk_id": 17,
@@ -79,11 +88,37 @@ async def test_search_returns_the_documented_shape(client, retriever):
                 "chunk_type": "budget_component",
                 "content": "OAuth backend",
                 "distance": 0.2314,
+                "score": None,
                 "metadata": {"year": 2024},
             }
         ],
     }
     assert retriever.received[0].k == 3
+
+
+async def test_mode_and_rerank_are_passed_through_and_echoed(client, retriever):
+    response = await client.post(
+        "/search", json={"query": "oauth", "search_mode": "hybrid", "rerank": True}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["search_mode"] == "hybrid"
+    assert response.json()["reranked"] is True
+    assert (retriever.received[0].search_mode, retriever.received[0].rerank) == ("hybrid", True)
+
+
+async def test_mode_and_rerank_are_optional(client, retriever):
+    response = await client.post("/search", json={"query": "oauth"})
+
+    assert response.status_code == 200
+    assert (retriever.received[0].search_mode, retriever.received[0].rerank) == (None, None)
+
+
+async def test_an_unknown_search_mode_is_rejected_with_422(client, retriever):
+    response = await client.post("/search", json={"query": "oauth", "search_mode": "lexical"})
+
+    assert response.status_code == 422
+    assert retriever.received == []
 
 
 async def test_k_defaults_to_five(client, retriever):

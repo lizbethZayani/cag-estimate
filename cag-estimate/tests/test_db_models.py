@@ -1,5 +1,5 @@
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import BigInteger, ForeignKey, Index
+from sqlalchemy import BigInteger, ForeignKey, Index, insert
 from sqlalchemy.dialects import postgresql
 
 from cag_estimate.db.base import Base
@@ -44,6 +44,7 @@ def test_chunks_columns() -> None:
         "embedding",
         "metadata",
         "created_at",
+        "content_tsv",
     ]
     assert CHUNKS.c.chunk_type.type.length == 50
     assert CHUNKS.c.created_at.type.timezone is True
@@ -85,10 +86,29 @@ def test_indexes_match_the_migration() -> None:
         "ix_chunks_document_id": ["document_id"],
         "ix_chunks_chunk_type": ["chunk_type"],
         "ix_chunks_metadata_gin": ["metadata"],
+        "ix_chunks_content_tsv": ["content_tsv"],
     }
-    gin = next(i for i in CHUNKS.indexes if i.name == "ix_chunks_metadata_gin")
-    assert gin.dialect_options["postgresql"]["using"] == "gin"
+    for name in ("ix_chunks_metadata_gin", "ix_chunks_content_tsv"):
+        gin = next(i for i in CHUNKS.indexes if i.name == name)
+        assert gin.dialect_options["postgresql"]["using"] == "gin"
     assert not next(i for i in DOCUMENTS.indexes).unique
+
+
+def test_content_tsv_is_a_stored_generated_english_tsvector() -> None:
+    column = CHUNKS.c.content_tsv
+
+    assert isinstance(column.type, postgresql.TSVECTOR)
+    assert column.computed is not None
+    assert column.computed.persisted is True
+    assert str(column.computed.sqltext) == "to_tsvector('english', content)"
+
+
+def test_insert_never_lists_the_generated_column() -> None:
+    statement = insert(ChunkRow).values(document_id=1, chunk_type="component", content="x")
+
+    compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "content_tsv" not in compiled
 
 
 def test_there_is_no_vector_index() -> None:

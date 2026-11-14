@@ -58,6 +58,15 @@ class Settings(BaseSettings):
     critic_model: str | None = None
     # SQLAlchemy async URL (env DATABASE_URL), e.g. postgresql+asyncpg://user:pass@host:5432/db
     database_url: str | None = None
+    # Default retrieval strategy of /search: dense vectors only or vectors + full text (RRF).
+    search_mode: Literal["vector", "hybrid"] = "vector"
+    # Rerank the recalled candidates with a cross-encoder (loaded lazily on first use).
+    rerank_enabled: bool = False
+    rerank_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    # Reciprocal Rank Fusion smoothing constant.
+    rrf_k: int = 60
+    # Candidates retrieved before reranking; the final size is the request k.
+    recall_k: int = 50
     app_env: str = "development"
     log_level: str = "DEBUG"
 

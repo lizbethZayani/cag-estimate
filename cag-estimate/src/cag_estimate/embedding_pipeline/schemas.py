@@ -11,6 +11,7 @@ NonEmptyStr = Field(min_length=1)
 DEFAULT_SEARCH_K = 5
 MAX_SEARCH_K = 50
 
+SearchMode = Literal["vector", "hybrid"]
 Sector = Literal["finance", "ecommerce", "healthcare", "industrial"]
 Complexity = Literal["low", "medium", "high"]
 MIN_YEAR = 2000
@@ -92,24 +93,39 @@ class SearchRequest(BaseModel):
     """Body of ``POST /search``: a free-text query and how many chunks to return."""
 
     query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    # The final number of results, also when a larger candidate pool is recalled first.
     k: int = Field(default=DEFAULT_SEARCH_K, ge=1, le=MAX_SEARCH_K)
+    # None means "use the configured default" (SEARCH_MODE / RERANK_ENABLED).
+    search_mode: SearchMode | None = None
+    rerank: bool | None = None
 
 
 class SearchResultItem(BaseModel):
-    """One retrieved chunk; ``distance`` is the raw cosine distance (lower = closer)."""
+    """One retrieved chunk, best first."""
 
     chunk_id: int
     document_id: int
     chunk_type: str
     content: str
-    distance: float
+    distance: float | None = Field(
+        description="Raw cosine distance (lower = closer); None for a lexical-only hit."
+    )
+    score: float | None = Field(
+        default=None,
+        description=(
+            "Rerank score when reranked, RRF score when hybrid without rerank, "
+            "None for a plain vector search (higher = better)."
+        ),
+    )
     metadata: dict[str, Any]
 
 
 class SearchResponse(BaseModel):
-    """Response of ``POST /search``: results ordered by ascending distance."""
+    """Response of ``POST /search``: results best first, plus the effective strategy used."""
 
     query: str
     k: int
     search_time_ms: int = Field(ge=0)
+    search_mode: SearchMode
+    reranked: bool = Field(description="False when rerank was off or failed soft.")
     results: list[SearchResultItem]
