@@ -23,6 +23,8 @@ from cag_estimate.schemas.estimation import (
 )
 from cag_estimate.schemas.session import ProjectMetadata
 
+RAG_ESTIMATION_PROMPT_VERSION = "v1"
+
 OutputFormat = Literal["json", "markdown"]
 _OUTPUT_FORMATS = get_args(OutputFormat)
 _BASE_DIR = Path(__file__).resolve().parent
@@ -105,6 +107,30 @@ def render_estimation_prompt(
     return (
         _render("estimation", "system", version, context),
         _render("estimation", "user", version, context),
+    )
+
+
+def render_rag_estimation_prompt(
+    query: str,
+    context_block: str,
+    feedback: str | None = None,
+    version: str = RAG_ESTIMATION_PROMPT_VERSION,
+) -> tuple[str, str]:
+    """Render the ``(system, user)`` prompts of the cited RAG estimate.
+
+    Args:
+        query: The project description to estimate.
+        context_block: The ``<sources>`` block built from the retrieved chunks.
+        feedback: Why the previous answer was rejected; ``None`` renders no feedback section.
+        version: Prompt template version directory, e.g. ``"v1"``.
+
+    Raises:
+        ValueError: If the version is unknown.
+    """
+    context = {"query": query, "context_block": context_block, "feedback": feedback}
+    return (
+        _render("rag_estimation", "system", version, context),
+        _render("rag_estimation", "user", version, context),
     )
 
 

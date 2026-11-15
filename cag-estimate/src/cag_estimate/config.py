@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     rrf_k: int = 60
     # Candidates retrieved before reranking; the final size is the request k.
     recall_k: int = 50
+    # OpenAI model used with the Responses API to generate cited RAG estimates.
+    generation_model: str = "gpt-4o-mini"
+    # Retrieved chunks passed to the generator as context.
+    rag_top_k: int = 10
+    generation_max_output_tokens: int = 4000
     app_env: str = "development"
     log_level: str = "DEBUG"
 
