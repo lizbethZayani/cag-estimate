@@ -26,6 +26,14 @@ class GoldenQuery(BaseModel):
     query: str = Field(min_length=1)
     relevant_budget_ids: list[BudgetId] = Field(min_length=1)
     rationale: str = Field(min_length=1)
+    ground_truth: str | None = None
+
+    @field_validator("ground_truth")
+    @classmethod
+    def _ground_truth_not_blank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("ground_truth must not be blank when present")
+        return value
 
     @field_validator("relevant_budget_ids")
     @classmethod
@@ -51,6 +59,14 @@ class GoldenSet(BaseModel):
 
 def load_golden_set(path: Path = GOLDEN_SET_PATH) -> GoldenSet:
     return GoldenSet.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+
+def require_ground_truth(golden_set: GoldenSet) -> list[GoldenQuery]:
+    """All queries, or a ``ValueError`` naming the ids that lack a ground truth."""
+    missing = [q.id for q in golden_set.queries if q.ground_truth is None]
+    if missing:
+        raise ValueError(f"queries without ground_truth: {', '.join(missing)}")
+    return list(golden_set.queries)
 
 
 @dataclass(frozen=True)

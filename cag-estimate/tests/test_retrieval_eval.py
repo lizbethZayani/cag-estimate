@@ -1,6 +1,7 @@
 """Tests for the retrieval evaluation logic: precision@k, aggregation, tables, golden set."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -10,12 +11,14 @@ from cag_estimate.evals.retrieval_eval import (
     CONFIGS,
     GOLDEN_SET_PATH,
     GoldenQuery,
+    GoldenSet,
     QueryMeasurement,
     load_golden_set,
     mean_precision,
     median_latency_ms,
     precision_at_k,
     render_markdown_table,
+    require_ground_truth,
 )
 
 BUDGETS_SAMPLE = Path(__file__).resolve().parent.parent / "data" / "budgets_sample.json"
@@ -183,3 +186,96 @@ def test_packaged_golden_set_has_five_queries_with_existing_budgets() -> None:
     assert len(golden.queries) == 5
     for query in golden.queries:
         assert set(query.relevant_budget_ids) <= known, query.id
+
+
+def test_golden_query_accepts_a_record_without_ground_truth() -> None:
+    assert GoldenQuery.model_validate(_query()).ground_truth is None
+
+
+def test_golden_query_accepts_a_record_with_ground_truth() -> None:
+    golden = GoldenQuery.model_validate(_query(ground_truth="Total: 10 hours."))
+
+    assert golden.ground_truth == "Total: 10 hours."
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\n\t "])
+def test_golden_query_rejects_a_blank_ground_truth(blank: str) -> None:
+    with pytest.raises(ValidationError):
+        GoldenQuery.model_validate(_query(ground_truth=blank))
+
+
+def test_load_golden_set_reads_ground_truth(tmp_path: Path) -> None:
+    path = tmp_path / "golden.json"
+    path.write_text(
+        json.dumps({"version": 1, "queries": [_query(ground_truth="ref"), _query(id="q2")]})
+    )
+
+    golden = load_golden_set(path)
+
+    assert [q.ground_truth for q in golden.queries] == ["ref", None]
+
+
+def test_require_ground_truth_returns_all_queries_when_complete() -> None:
+    golden = GoldenSet.model_validate(
+        {
+            "version": 1,
+            "queries": [_query(ground_truth="a"), _query(id="q2", ground_truth="b")],
+        }
+    )
+
+    assert [q.id for q in require_ground_truth(golden)] == ["q1", "q2"]
+
+
+def test_require_ground_truth_names_the_missing_query_ids() -> None:
+    golden = GoldenSet.model_validate(
+        {
+            "version": 1,
+            "queries": [
+                _query(ground_truth="a"),
+                _query(id="q2"),
+                _query(id="q3"),
+            ],
+        }
+    )
+
+    with pytest.raises(ValueError, match="q2.*q3"):
+        require_ground_truth(golden)
+
+
+def test_packaged_golden_set_has_ground_truth_on_every_query() -> None:
+    golden = load_golden_set(GOLDEN_SET_PATH)
+
+    assert len(require_ground_truth(golden)) == 5
+    for query in golden.queries:
+        assert query.ground_truth is not None and query.ground_truth.strip(), query.id
+
+
+_BULLET = re.compile(
+    r"^- .+: (?P<hours>\d+) hours \((?P<budget>BUD-\d{4}-\d{3})::(?P<component>[A-Z0-9-]+)\)$"
+)
+_TOTAL = re.compile(r"^Total: (?P<total>\d+) hours\.$")
+
+
+def test_packaged_ground_truths_match_the_historical_budgets() -> None:
+    golden = load_golden_set(GOLDEN_SET_PATH)
+    hours_by_component = {
+        (b["budget_id"], c["component_id"]): c["estimated_hours"]
+        for b in json.loads(BUDGETS_SAMPLE.read_text(encoding="utf-8"))
+        for c in b["components"]
+    }
+
+    for query in golden.queries:
+        assert query.ground_truth is not None
+        lines = query.ground_truth.split("\n")
+        bullets = [m for line in lines if (m := _BULLET.match(line))]
+        total = _TOTAL.match(lines[-1])
+        assert bullets, query.id
+        assert total is not None, query.id
+        cited_budgets = set()
+        for bullet in bullets:
+            key = (bullet["budget"], bullet["component"])
+            assert key in hours_by_component, (query.id, key)
+            assert int(bullet["hours"]) == hours_by_component[key], (query.id, key)
+            cited_budgets.add(bullet["budget"])
+        assert int(total["total"]) == sum(int(b["hours"]) for b in bullets), query.id
+        assert set(query.relevant_budget_ids) <= cited_budgets, query.id

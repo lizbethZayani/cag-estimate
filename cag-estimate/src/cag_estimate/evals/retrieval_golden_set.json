@@ -5,31 +5,36 @@
       "id": "q1-ecommerce-store",
       "query": "Online store for a gourmet food retailer: searchable product catalog, shopping cart with secure card checkout, order management with refunds, and a fast mobile storefront.",
       "relevant_budget_ids": ["BUD-2024-005", "BUD-2024-006"],
-      "rationale": "005 has catalog, cart/checkout and storefront; 006 has split order management and dispute/refund handling; 003 (payments gateway) is the near-miss to avoid."
+      "rationale": "005 has catalog, cart/checkout and storefront; 006 has split order management and dispute/refund handling; 003 (payments gateway) is the near-miss to avoid.",
+      "ground_truth": "Reference estimate for this project, in hours, derived from the historical budgets:\n- Product catalog API with searchable catalog: 150 hours (BUD-2024-005::CATALOG-001)\n- Cart and checkout service with card payment: 140 hours (BUD-2024-005::CART-002)\n- Order management: 170 hours (BUD-2024-006::ORDER-002)\n- Dispute and refund handling: 100 hours (BUD-2024-006::DISP-004)\n- Mobile storefront PWA: 60 hours (BUD-2024-005::STORE-004)\nTotal: 620 hours."
     },
     {
       "id": "q2-fintech-compliance",
       "query": "Fintech backend with strong customer authentication and regulatory compliance: open banking connectors, OAuth login for the mobile app, automated regulatory reporting and electronic signature of contracts.",
       "relevant_budget_ids": ["BUD-2024-001", "BUD-2024-002"],
-      "rationale": "001 has OAuth and PSD2 connectors; 002 has regulatory reporting export and e-signature; 003 and 004 are same-sector near-misses."
+      "rationale": "001 has OAuth and PSD2 connectors; 002 has regulatory reporting export and e-signature; 003 and 004 are same-sector near-misses.",
+      "ground_truth": "Reference estimate for this project, in hours, derived from the historical budgets:\n- OAuth 2.0 authentication backend: 120 hours (BUD-2024-001::AUTH-001)\n- PSD2 open banking connectors: 160 hours (BUD-2024-001::PSD2-002)\n- Regulatory reporting export: 60 hours (BUD-2024-002::REPORT-004)\n- E-signature integration: 80 hours (BUD-2024-002::SIGN-003)\nTotal: 420 hours."
     },
     {
       "id": "q3-remote-care",
       "query": "Remote care platform that ingests data from patients' wearable devices, alerts the care team through a clinical dashboard and offers video consultations integrated with hospital records over HL7/FHIR.",
       "relevant_budget_ids": ["BUD-2024-009", "BUD-2024-010"],
-      "rationale": "009 has FHIR integration and telemedicine video; 010 has wearable ingestion, clinical alerting and the care team dashboard; 011 and 012 are same-sector near-misses and 013 (IoT telemetry) is a cross-sector near-miss."
+      "rationale": "009 has FHIR integration and telemedicine video; 010 has wearable ingestion, clinical alerting and the care team dashboard; 011 and 012 are same-sector near-misses and 013 (IoT telemetry) is a cross-sector near-miss.",
+      "ground_truth": "Reference estimate for this project, in hours, derived from the historical budgets:\n- Wearable data ingestion: 180 hours (BUD-2024-010::INGEST-001)\n- Clinical alerting engine: 150 hours (BUD-2024-010::ALERT-002)\n- Care team dashboard: 150 hours (BUD-2024-010::CARE-003)\n- Telemedicine video sessions: 160 hours (BUD-2024-009::VIDEO-003)\n- FHIR integration layer: 190 hours (BUD-2024-009::FHIR-001)\nTotal: 830 hours."
     },
     {
       "id": "q4-industrial-data",
       "query": "Real-time sensor data pipeline for plants and utilities, with load forecasting and predictive maintenance models and an operations dashboard on top.",
       "relevant_budget_ids": ["BUD-2024-013", "BUD-2024-015"],
-      "rationale": "013 has sensor telemetry, predictive maintenance and a SCADA dashboard; 015 has the smart meter data pipeline and load forecasting; 010 (wearable ingestion) is a cross-sector near-miss with similar tech."
+      "rationale": "013 has sensor telemetry, predictive maintenance and a SCADA dashboard; 015 has the smart meter data pipeline and load forecasting; 010 (wearable ingestion) is a cross-sector near-miss with similar tech.",
+      "ground_truth": "Reference estimate for this project, in hours, derived from the historical budgets:\n- Sensor telemetry ingestion for plants: 170 hours (BUD-2024-013::TELE-001)\n- Smart meter data pipeline for utilities: 200 hours (BUD-2024-015::METER-001)\n- Load forecasting service: 140 hours (BUD-2024-015::FORECAST-003)\n- Predictive maintenance models: 200 hours (BUD-2024-013::PRED-002)\n- SCADA dashboard integration for the operations dashboard: 130 hours (BUD-2024-013::SCADA-003)\nTotal: 840 hours."
     },
     {
       "id": "q5-logistics",
       "query": "Last-mile logistics software with route optimization for delivery vehicles, delivery slot booking for customers, real-time inventory sync and warehouse dock scheduling.",
       "relevant_budget_ids": ["BUD-2024-007", "BUD-2024-014"],
-      "rationale": "007 has slot booking, route optimization and inventory sync; 014 has yard and dock scheduling and the warehouse core."
+      "rationale": "007 has slot booking, route optimization and inventory sync; 014 has yard and dock scheduling and the warehouse core.",
+      "ground_truth": "Reference estimate for this project, in hours, derived from the historical budgets:\n- Route optimization service: 180 hours (BUD-2024-007::ROUTE-002)\n- Delivery slot booking: 120 hours (BUD-2024-007::SLOT-001)\n- Real-time inventory sync: 120 hours (BUD-2024-007::INV-003)\n- Yard and dock scheduling: 110 hours (BUD-2024-014::YARD-003)\nTotal: 530 hours."
     }
   ]
 }
