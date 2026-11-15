@@ -23,7 +23,7 @@ from cag_estimate.embedding_pipeline.router import router as embeddings_router
 from cag_estimate.embedding_pipeline.search_router import router as search_router
 from cag_estimate.logging_config import configure_logging
 from cag_estimate.request_context import REQUEST_ID_HEADER, resolve_request_id
-from cag_estimate.routers import estimations, sessions
+from cag_estimate.routers import estimations, rag_estimation, sessions
 
 
 # Health check response model
@@ -79,6 +79,7 @@ async def correlate_request(request: Request, call_next: RequestResponseEndpoint
 
 # Include routers
 app.include_router(estimations.router)
+app.include_router(rag_estimation.router)
 app.include_router(sessions.router)
 app.include_router(embeddings_router)
 app.include_router(search_router)
