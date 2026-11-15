@@ -740,6 +740,54 @@ curl -s -X POST http://localhost:8000/search -H "Content-Type: application/json"
 
 The reranker needs a heavier image and a model download: see [`DOCKER.md`](DOCKER.md). To reproduce and measure, follow [`session10/MANUAL_VALIDATION.md`](session10/MANUAL_VALIDATION.md); the comparison is written up in [`session10/RESULTS.md`](session10/RESULTS.md).
 
+## Cited RAG estimates and the RAGAS baseline
+
+Session 11 adds an estimate whose every line carries verifiable citations, and a RAGAS baseline over it. It is **additive**: the new endpoint `POST /api/v1/estimate/rag` sits beside the legacy estimation flows, and `TaskEstimate` and the Rails contract are unchanged.
+
+**Flow.** Retrieve (hybrid, no rerank, `RAG_TOP_K` chunks) -> context block whose ids are `BUDGET::COMPONENT` (for example `BUD-2024-005::CART-002`) -> OpenAI Responses API with strict structured output -> `verify_citations` -> on a dangling citation, **one** corrective retry that names the invented ids -> still dangling: rejected with `502`. With no retrieved chunk the answer is `insufficient` without calling the generator.
+
+**Line model and integrity rule** (`schemas/rag_estimation.py`):
+
+- A **grounded** line needs at least one source (`chunk_id`, `document_id`, verbatim `evidence`) and `hours`.
+- A **not grounded** line has no sources and `hours = null`, and its rationale says what data is missing.
+- `total_hours` is computed from the grounded lines, never trusted from the LLM (null when none is grounded).
+
+**Citation report** (`services/citations.py`): each line is `grounded` (all cited ids were retrieved), `dangling` (cites an id that was never retrieved) or `insufficient` (not grounded). The service logs a `citation_report` event with counts, dangling ids, attempts and `prompt_version`, never the query or chunk text. Every request gets a `request_id` (the `X-Request-ID` header is honoured and echoed), bound to all its log lines.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPENAI_API_KEY` | none | required: generation, embeddings and the RAGAS judge |
+| `GENERATION_MODEL` | `gpt-4o-mini` | model of the Responses API call |
+| `RAG_TOP_K` | `10` | chunks retrieved per request |
+| `GENERATION_MAX_OUTPUT_TOKENS` | `4000` | output budget of the generation call |
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/estimate/rag \
+  -H "Content-Type: application/json" -H "X-Request-ID: demo-1" \
+  -d '{"query": "Online store with product catalog, cart and card checkout"}'
+```
+
+The response has `estimate`, `citation_report`, `prompt_version` and `retrieved_chunk_ids`. Errors are generic: `503` not configured or database down, `502` generation or embeddings failed or citations rejected.
+
+**Offline demo** (no network, no key): plants the invented id `BUD-2099-999::FAKE-001` and shows the verifier catching it; exit `0` means it was detected.
+
+```bash
+PYTHONPATH=src uv run python scripts/demo_verify_citations.py
+```
+
+**RAGAS evaluation** (faithfulness, answer relevancy, context precision, context recall) over the 5 golden queries, run on the host against the running pgvector. `ragas` lives in the `evals` dependency group, which the Docker image does not install:
+
+```bash
+uv sync --group evals
+DATABASE_URL=postgresql+asyncpg://estimator:estimator@localhost:5433/estimator PYTHONPATH=src uv run --group evals python scripts/eval_ragas.py
+```
+
+It writes `session11/ragas_samples.json` and `session11/ragas_raw.json`; add `--score-only` to re-score the saved samples without regenerating (no generation cost).
+
+**Deviations from the brief:** this repo has no rewrite/expand/route stages, so the RAG service is thin (retrieve, generate, verify); `hours` is nullable (null iff not grounded); ids use the `BUDGET::COMPONENT` form because chunks are budget components.
+
+To reproduce, follow [`session11/MANUAL_VALIDATION.md`](session11/MANUAL_VALIDATION.md); the results template is [`session11/RESULTS.md`](session11/RESULTS.md).
+
 ## Web UI (Rails)
 
 A Rails 8 web UI lives in [`../estimator-web/`](../estimator-web/README.md). Its root page is a **conversation** over the session endpoints (`/api/v1/sessions/...`): follow-up messages, file attachments, an audience selector and a memory panel (project, team, technologies, scope, turns), with a "New conversation" button that deletes the session. The original one-shot form (`POST /api/v1/estimate`, not the streaming one) stays at `/estimations/new` as "Single estimate", and successful estimates are kept as History in Postgres. Sessions live in the API process memory, so an API restart ends the conversation and the UI starts a new one. The Streamlit chat above, with its streaming markdown mode, is still available.

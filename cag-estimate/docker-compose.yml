@@ -85,6 +85,10 @@ services:
       - RERANK_MODEL=${RERANK_MODEL:-cross-encoder/mmarco-mMiniLMv2-L12-H384-v1}
       - RRF_K=${RRF_K:-60}
       - RECALL_K=${RECALL_K:-50}
+      # Cited RAG estimate (POST /api/v1/estimate/rag); uses OPENAI_API_KEY above.
+      - GENERATION_MODEL=${GENERATION_MODEL:-gpt-4o-mini}
+      - RAG_TOP_K=${RAG_TOP_K:-10}
+      - GENERATION_MAX_OUTPUT_TOKENS=${GENERATION_MAX_OUTPUT_TOKENS:-4000}
       # Where the reranker model (~450 MB) is cached; backed by the hf-cache volume.
       - HF_HOME=/home/appuser/.cache/huggingface
       - APP_ENV=${APP_ENV:-production}
