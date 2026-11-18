@@ -1,0 +1,328 @@
+{
+  "judge_model": "gpt-4o-mini",
+  "embedding_model": "text-embedding-3-small",
+  "queries": [
+    {
+      "query_id": "q1-ecommerce-store",
+      "status": "ok",
+      "error": null,
+      "scores": {
+        "faithfulness": 0.3888888888888889,
+        "answer_relevancy": 0.10278827844350691,
+        "context_precision": 0.999999999975,
+        "context_recall": 1.0
+      },
+      "citation_report": {
+        "total_lines": 6,
+        "grounded_lines": 6,
+        "dangling_lines": 0,
+        "insufficient_lines": 0,
+        "dangling_chunk_ids": [],
+        "lines": [
+          {
+            "component": "Cart and checkout service",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-005::CART-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Product catalog API",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-005::CATALOG-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Split order management",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-006::ORDER-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Storefront PWA",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-005::STORE-004"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Dispute and refund handling",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-006::DISP-004"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Personalized recommendations",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-005::RECO-003"
+            ],
+            "dangling_chunk_ids": []
+          }
+        ]
+      }
+    },
+    {
+      "query_id": "q2-fintech-compliance",
+      "status": "ok",
+      "error": null,
+      "scores": {
+        "faithfulness": 0.3125,
+        "answer_relevancy": 0.4542913464744136,
+        "context_precision": 0.9999999999875,
+        "context_recall": 0.8
+      },
+      "citation_report": {
+        "total_lines": 4,
+        "grounded_lines": 4,
+        "dangling_lines": 0,
+        "insufficient_lines": 0,
+        "dangling_chunk_ids": [],
+        "lines": [
+          {
+            "component": "PSD2 open banking connectors",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-001::PSD2-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "OAuth 2.0 authentication backend",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-001::AUTH-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "E-signature integration",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-002::SIGN-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Regulatory reporting export",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-002::REPORT-004"
+            ],
+            "dangling_chunk_ids": []
+          }
+        ]
+      }
+    },
+    {
+      "query_id": "q3-remote-care",
+      "status": "ok",
+      "error": null,
+      "scores": {
+        "faithfulness": 0.23809523809523808,
+        "answer_relevancy": 0.4780379634804853,
+        "context_precision": 0.9617346938638119,
+        "context_recall": 1.0
+      },
+      "citation_report": {
+        "total_lines": 5,
+        "grounded_lines": 5,
+        "dangling_lines": 0,
+        "insufficient_lines": 0,
+        "dangling_chunk_ids": [],
+        "lines": [
+          {
+            "component": "Care team dashboard",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-010::CARE-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Clinical alerting engine",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-010::ALERT-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Wearable data ingestion",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-010::INGEST-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "FHIR integration layer",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-009::FHIR-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Telemedicine video sessions",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-009::VIDEO-003"
+            ],
+            "dangling_chunk_ids": []
+          }
+        ]
+      }
+    },
+    {
+      "query_id": "q4-industrial-data",
+      "status": "ok",
+      "error": null,
+      "scores": {
+        "faithfulness": 0.7619047619047619,
+        "answer_relevancy": 0.25636792583145185,
+        "context_precision": 0.99999999998,
+        "context_recall": 0.8333333333333334
+      },
+      "citation_report": {
+        "total_lines": 8,
+        "grounded_lines": 8,
+        "dangling_lines": 0,
+        "insufficient_lines": 0,
+        "dangling_chunk_ids": [],
+        "lines": [
+          {
+            "component": "SCADA dashboard integration",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-013::SCADA-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Predictive maintenance models",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-013::PRED-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Sensor telemetry ingestion",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-013::TELE-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Load forecasting service",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-015::FORECAST-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Smart meter data pipeline",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-015::METER-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Wearable data ingestion",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-010::INGEST-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Real-time inventory sync",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-007::INV-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Care team dashboard",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-010::CARE-003"
+            ],
+            "dangling_chunk_ids": []
+          }
+        ]
+      }
+    },
+    {
+      "query_id": "q5-logistics",
+      "status": "ok",
+      "error": null,
+      "scores": {
+        "faithfulness": 0.5,
+        "answer_relevancy": 0.4315757440475921,
+        "context_precision": 0.9999999999666667,
+        "context_recall": 1.0
+      },
+      "citation_report": {
+        "total_lines": 4,
+        "grounded_lines": 4,
+        "dangling_lines": 0,
+        "insufficient_lines": 0,
+        "dangling_chunk_ids": [],
+        "lines": [
+          {
+            "component": "Route optimization service",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-007::ROUTE-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Real-time inventory sync",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-007::INV-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Delivery slot booking",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-007::SLOT-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Yard and dock scheduling",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-014::YARD-003"
+            ],
+            "dangling_chunk_ids": []
+          }
+        ]
+      }
+    }
+  ],
+  "averages": {
+    "faithfulness": 0.44027777777777777,
+    "answer_relevancy": 0.3446122516554899,
+    "context_precision": 0.9923469387545957,
+    "context_recall": 0.9266666666666667
+  }
+}
