@@ -18,6 +18,10 @@ from cag_estimate.schemas.rag_estimation import EstimateLineItem, RagEstimate
 log = structlog.get_logger()
 
 METRICS = ("faithfulness", "answer_relevancy", "context_precision", "context_recall")
+
+# ragas defaults to 1024 output tokens, which truncates the judge's structured output on longer
+# answers (IncompleteOutputException); its own documentation recommends 4096 or more.
+JUDGE_MAX_TOKENS = 4096
 _TITLES = {
     "faithfulness": "Faithfulness",
     "answer_relevancy": "Answer relevancy",
@@ -134,7 +138,7 @@ class RagasScorer:
 
 def build_ragas_scorer(api_key: str, judge_model: str, embedding_model: str) -> RagasScorer:
     """Real scorer backed by OpenAI clients (constructing them does not call the network)."""
-    from openai import AsyncOpenAI, OpenAI
+    from openai import AsyncOpenAI
     from ragas.embeddings import OpenAIEmbeddings
     from ragas.llms import llm_factory
     from ragas.metrics.collections import (
@@ -144,8 +148,9 @@ def build_ragas_scorer(api_key: str, judge_model: str, embedding_model: str) -> 
         Faithfulness,
     )
 
-    llm = llm_factory(judge_model, client=AsyncOpenAI(api_key=api_key))
-    embeddings = OpenAIEmbeddings(client=OpenAI(api_key=api_key), model=embedding_model)
+    llm = llm_factory(judge_model, client=AsyncOpenAI(api_key=api_key), max_tokens=JUDGE_MAX_TOKENS)
+    # AnswerRelevancy awaits `aembed_text`, which only works with an async client.
+    embeddings = OpenAIEmbeddings(client=AsyncOpenAI(api_key=api_key), model=embedding_model)
     return RagasScorer(
         {
             "faithfulness": Faithfulness(llm=llm),

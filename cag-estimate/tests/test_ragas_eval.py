@@ -244,3 +244,25 @@ def test_build_ragas_scorer_constructs_without_network() -> None:
     scorer = build_ragas_scorer("sk-test", "gpt-4o-mini", "text-embedding-3-small")
 
     assert isinstance(scorer, RagasScorer)
+
+
+def test_build_ragas_scorer_gives_answer_relevancy_an_async_embeddings_client() -> None:
+    # ragas 0.4.4 awaits `aembed_text` in AnswerRelevancy, which rejects a synchronous client
+    # with a TypeError (seen in the first live run: all five queries scored n/a).
+    pytest.importorskip("ragas")
+
+    scorer = build_ragas_scorer("sk-test", "gpt-4o-mini", "text-embedding-3-small")
+
+    answer_relevancy = vars(scorer)["_metrics"]["answer_relevancy"]
+    assert answer_relevancy.embeddings.is_async is True
+
+
+def test_build_ragas_scorer_raises_the_judge_output_limit() -> None:
+    # The ragas default of 1024 tokens truncated the judge's structured output on longer
+    # answers (IncompleteOutputException on faithfulness in the first live run).
+    pytest.importorskip("ragas")
+
+    scorer = build_ragas_scorer("sk-test", "gpt-4o-mini", "text-embedding-3-small")
+
+    for name, metric in vars(scorer)["_metrics"].items():
+        assert metric.llm.model_args["max_tokens"] >= 4096, name
