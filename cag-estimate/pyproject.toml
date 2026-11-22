@@ -43,6 +43,9 @@ dev = [
     "fakeredis>=2.20",
     "fpdf2>=2.8.9",
 ]
+evals = [
+    "ragas>=0.4.4",
+]
 
 [tool.ruff]
 line-length = 100

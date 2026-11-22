@@ -5,7 +5,7 @@ from typing import Any
 
 import redis
 import structlog
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 
 from cag_estimate.cache.semantic import EstimationSemanticCache
 from cag_estimate.cache.vectorizer import LazyOpenAIVectorizer
@@ -22,6 +22,8 @@ from cag_estimate.services.critic import Critic
 from cag_estimate.services.estimation import EstimationService
 from cag_estimate.services.llm_summarizer import LlmSummarizer, TextCompleter
 from cag_estimate.services.llm_wrapper import get_llm_wrapper
+from cag_estimate.services.rag_estimation import RagEstimationService
+from cag_estimate.services.rag_generation import RagGenerator
 from cag_estimate.services.session_compression import (
     AnchorDetector,
     ExtractiveSummarizer,
@@ -120,6 +122,40 @@ def build_semantic_retriever() -> SemanticRetriever | None:
 def get_semantic_retriever() -> SemanticRetriever | None:
     """Process-wide semantic retriever (None when not configured)."""
     return build_semantic_retriever()
+
+
+def build_rag_generator() -> RagGenerator | None:
+    """Cited-estimate generator, or None when no OpenAI key is set."""
+    settings = get_settings()
+    if not settings.openai_api_key:
+        log.warning("rag_generator_unavailable", reason="no_openai_key")
+        return None
+    return RagGenerator(
+        AsyncOpenAI(api_key=settings.openai_api_key),
+        settings.generation_model,
+        settings.generation_max_output_tokens,
+    )
+
+
+@lru_cache
+def get_rag_generator() -> RagGenerator | None:
+    """Process-wide RAG generator (None when not configured)."""
+    return build_rag_generator()
+
+
+def build_rag_estimation_service() -> RagEstimationService | None:
+    """Cited RAG estimation service, or None without a retriever or a generator."""
+    retriever = get_semantic_retriever()
+    generator = get_rag_generator()
+    if retriever is None or generator is None:
+        return None
+    return RagEstimationService(retriever, generator, top_k=get_settings().rag_top_k)
+
+
+@lru_cache
+def get_rag_estimation_service() -> RagEstimationService | None:
+    """Process-wide RAG estimation service (None when not configured)."""
+    return build_rag_estimation_service()
 
 
 def build_reranker() -> CrossEncoderReranker:

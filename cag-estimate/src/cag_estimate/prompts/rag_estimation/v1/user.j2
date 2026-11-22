@@ -1,0 +1,14 @@
+Estimate the following project using only the historical budget sources below.
+
+<project_description>
+{{ query }}
+</project_description>
+
+{{ context_block }}
+{% if feedback %}
+
+<previous_answer_feedback>
+Your previous answer was rejected: {{ feedback }}
+Fix the problem and answer again, citing only source ids that appear in <sources>.
+</previous_answer_feedback>
+{% endif %}

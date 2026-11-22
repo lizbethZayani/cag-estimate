@@ -1,0 +1,385 @@
+{
+  "records": [
+    {
+      "query_id": "q1-ecommerce-store",
+      "status": "ok",
+      "error": null,
+      "dangling_chunk_ids": [],
+      "citation_report": {
+        "total_lines": 6,
+        "grounded_lines": 6,
+        "dangling_lines": 0,
+        "insufficient_lines": 0,
+        "dangling_chunk_ids": [],
+        "lines": [
+          {
+            "component": "Cart and checkout service",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-005::CART-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Product catalog API",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-005::CATALOG-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Split order management",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-006::ORDER-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Storefront PWA",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-005::STORE-004"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Dispute and refund handling",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-006::DISP-004"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Personalized recommendations",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-005::RECO-003"
+            ],
+            "dangling_chunk_ids": []
+          }
+        ]
+      },
+      "sample": {
+        "query_id": "q1-ecommerce-store",
+        "question": "Online store for a gourmet food retailer: searchable product catalog, shopping cart with secure card checkout, order management with refunds, and a fast mobile storefront.",
+        "answer": "- Cart and checkout service: 140 hours. Based on the estimated hours provided for the Cart and checkout service which is relevant for the secure card checkout. Evidence: Estimated hours: 140\n- Product catalog API: 150 hours. Estimated hours from the Product catalog API will support the searchable product catalog feature of the project. Evidence: Estimated hours: 150\n- Split order management: 170 hours. The Split order management service, which manages order tracking and refunds, fits the order management functionality of the project. Evidence: Estimated hours: 170\n- Storefront PWA: 60 hours. The Storefront PWA will facilitate the fast mobile storefront requirement of the project. Evidence: Estimated hours: 60\n- Dispute and refund handling: 100 hours. The Dispute and refund handling service will address the refund capabilities of the order management system. Evidence: Estimated hours: 100\n- Personalized recommendations: 110 hours. Implementing personalized recommendations would enhance the customer experience when searching for products. Evidence: Estimated hours: 110\nTotal: 730 hours.\nAssumptions:\n- The online store will have a similar tech stack to the referenced projects (e.g., node, ruby_on_rails).\n- The complexity of the components is accounted for based on existing estimates in similar projects.\n- All the features mentioned in the project description are separable components that map well to existing estimates.\nConfidence: high",
+        "contexts": [
+          "[Project: Headless e-commerce storefront with personalized recommendations]\n[Client sector: ecommerce | Year: 2024 | Main tech: node]\n\nComponent: Cart and checkout service\nDescription: Stateless cart service with promotion engine, tax calculation and a checkout orchestration that integrates the payment provider.\nTech stack: node, redis, postgresql\nComplexity: high\nEstimated hours: 140",
+          "[Project: Headless e-commerce storefront with personalized recommendations]\n[Client sector: ecommerce | Year: 2024 | Main tech: node]\n\nComponent: Product catalog API\nDescription: GraphQL catalog API with faceted search, inventory availability and multi-currency pricing backed by Elasticsearch.\nTech stack: node, graphql, elasticsearch\nComplexity: medium\nEstimated hours: 150",
+          "[Project: Headless e-commerce storefront with personalized recommendations]\n[Client sector: ecommerce | Year: 2024 | Main tech: node]\n\nComponent: Storefront PWA\nDescription: Progressive web app storefront consuming the headless APIs with server-side rendering for SEO.\nTech stack: next_js, react\nComplexity: low\nEstimated hours: 60",
+          "[Project: Headless e-commerce storefront with personalized recommendations]\n[Client sector: ecommerce | Year: 2024 | Main tech: node]\n\nComponent: Personalized recommendations\nDescription: Collaborative-filtering recommendations served from a feature store and exposed as a low-latency API for product and cart pages.\nTech stack: node, redis\nComplexity: medium\nEstimated hours: 110",
+          "[Project: Multi-vendor marketplace with vendor payouts and dispute handling]\n[Client sector: ecommerce | Year: 2023 | Main tech: ruby_on_rails]\n\nComponent: Split order management\nDescription: Order splitting across vendors, per-vendor fulfillment state machines and customer-facing consolidated order tracking.\nTech stack: ruby_on_rails, sidekiq, postgresql\nComplexity: high\nEstimated hours: 170",
+          "[Project: Grocery delivery app with slot booking and route optimization]\n[Client sector: ecommerce | Year: 2024 | Main tech: go]\n\nComponent: Real-time inventory sync\nDescription: Near-real-time inventory synchronization from store systems with out-of-stock substitution suggestions.\nTech stack: go, kafka\nComplexity: medium\nEstimated hours: 120",
+          "[Project: Multi-vendor marketplace with vendor payouts and dispute handling]\n[Client sector: ecommerce | Year: 2023 | Main tech: ruby_on_rails]\n\nComponent: Dispute and refund handling\nDescription: Buyer-seller dispute workflow with evidence upload, SLA timers and partial refund support.\nTech stack: ruby_on_rails\nComplexity: medium\nEstimated hours: 100",
+          "[Project: Grocery delivery app with slot booking and route optimization]\n[Client sector: ecommerce | Year: 2024 | Main tech: go]\n\nComponent: Route optimization service\nDescription: Vehicle routing optimization that batches orders into delivery runs minimizing distance under time-window and capacity constraints.\nTech stack: go\nComplexity: high\nEstimated hours: 180",
+          "[Project: Fashion returns management and resale portal]\n[Client sector: ecommerce | Year: 2023 | Main tech: dotnet]\n\nComponent: Resale listing sync\nDescription: Synchronization of graded resale items to the secondary storefront with availability and pricing updates.\nTech stack: dotnet, sqlserver\nComplexity: low\nEstimated hours: 60",
+          "[Project: Warehouse management system with automated guided vehicle coordination]\n[Client sector: industrial | Year: 2023 | Main tech: go]\n\nComponent: Warehouse management core\nDescription: Inventory, putaway and picking management with wave planning and barcode/RFID scanning support.\nTech stack: go, postgresql\nComplexity: high\nEstimated hours: 220"
+        ],
+        "ground_truth": "Reference estimate for this project, in hours, derived from the historical budgets:\n- Product catalog API with searchable catalog: 150 hours (BUD-2024-005::CATALOG-001)\n- Cart and checkout service with card payment: 140 hours (BUD-2024-005::CART-002)\n- Order management: 170 hours (BUD-2024-006::ORDER-002)\n- Dispute and refund handling: 100 hours (BUD-2024-006::DISP-004)\n- Mobile storefront PWA: 60 hours (BUD-2024-005::STORE-004)\nTotal: 620 hours."
+      }
+    },
+    {
+      "query_id": "q2-fintech-compliance",
+      "status": "ok",
+      "error": null,
+      "dangling_chunk_ids": [],
+      "citation_report": {
+        "total_lines": 4,
+        "grounded_lines": 4,
+        "dangling_lines": 0,
+        "insufficient_lines": 0,
+        "dangling_chunk_ids": [],
+        "lines": [
+          {
+            "component": "PSD2 open banking connectors",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-001::PSD2-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "OAuth 2.0 authentication backend",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-001::AUTH-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "E-signature integration",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-002::SIGN-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Regulatory reporting export",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-002::REPORT-004"
+            ],
+            "dangling_chunk_ids": []
+          }
+        ]
+      },
+      "sample": {
+        "query_id": "q2-fintech-compliance",
+        "question": "Fintech backend with strong customer authentication and regulatory compliance: open banking connectors, OAuth login for the mobile app, automated regulatory reporting and electronic signature of contracts.",
+        "answer": "- PSD2 open banking connectors: 160 hours. Derived from the previous project's estimated hours for the PSD2 open banking connectors, which includes strong customer authentication. Evidence: Estimated hours: 160\n- OAuth 2.0 authentication backend: 120 hours. Hours taken from the OAuth 2.0 authentication backend project, which aligns with the mobile app's authentication needs. Evidence: Estimated hours: 120\n- E-signature integration: 80 hours. Estimated hours for integration with an e-signature provider are applicable for electronic signature functionality in the new project. Evidence: Estimated hours: 80\n- Regulatory reporting export: 60 hours. Utilizes estimated hours for regulatory reporting, as such functionality is essential for compliance in the fintech project. Evidence: Estimated hours: 60\nTotal: 420 hours.\nAssumptions:\n- The scope requires integration of PSD2 compliant open banking features, OAuth for mobile security, electronic signatures for contracts, and regulatory reporting for compliance.\nConfidence: high",
+        "contexts": [
+          "[Project: Mobile banking API with OAuth 2.0 authentication and PSD2 compliance]\n[Client sector: finance | Year: 2024 | Main tech: ruby_on_rails]\n\nComponent: PSD2 open banking connectors\nDescription: Account information and payment initiation endpoints compliant with PSD2/Berlin Group, including strong customer authentication (SCA) and consent management.\nTech stack: ruby_on_rails, postgresql\nComplexity: high\nEstimated hours: 160",
+          "[Project: Mobile banking API with OAuth 2.0 authentication and PSD2 compliance]\n[Client sector: finance | Year: 2024 | Main tech: ruby_on_rails]\n\nComponent: OAuth 2.0 authentication backend\nDescription: Implementation of OAuth 2.0 flows (authorization code, refresh token) with JWT-based session management, multi-tenant token isolation, and rate limiting per client.\nTech stack: ruby_on_rails, postgresql, redis\nComplexity: high\nEstimated hours: 120",
+          "[Project: Mobile banking API with OAuth 2.0 authentication and PSD2 compliance]\n[Client sector: finance | Year: 2024 | Main tech: ruby_on_rails]\n\nComponent: Push and email notifications\nDescription: Event-driven notifications for transaction alerts and security events delivered via APNs/FCM and transactional email.\nTech stack: ruby_on_rails, redis\nComplexity: low\nEstimated hours: 60",
+          "[Project: Mobile banking API with OAuth 2.0 authentication and PSD2 compliance]\n[Client sector: finance | Year: 2024 | Main tech: ruby_on_rails]\n\nComponent: Transaction ledger service\nDescription: Double-entry transaction ledger with idempotent writes, daily reconciliation jobs and an audit trail of every balance change.\nTech stack: ruby_on_rails, postgresql, sidekiq\nComplexity: medium\nEstimated hours: 140",
+          "[Project: Automated loan origination platform with credit scoring and e-signature]\n[Client sector: finance | Year: 2024 | Main tech: python_django]\n\nComponent: E-signature integration\nDescription: Integration with a qualified e-signature provider for legally binding loan contracts, including webhook handling and signed-document archival.\nTech stack: python_django\nComplexity: low\nEstimated hours: 80",
+          "[Project: Automated loan origination platform with credit scoring and e-signature]\n[Client sector: finance | Year: 2024 | Main tech: python_django]\n\nComponent: Regulatory reporting export\nDescription: Scheduled export of portfolio metrics and delinquency reports in regulator-mandated formats.\nTech stack: python_django, pandas\nComplexity: low\nEstimated hours: 60",
+          "[Project: Automated loan origination platform with credit scoring and e-signature]\n[Client sector: finance | Year: 2024 | Main tech: python_django]\n\nComponent: Loan origination workflow\nDescription: Configurable application workflow with KYC checks, document upload, underwriting queue and automatic decisioning thresholds.\nTech stack: python_django, postgresql\nComplexity: medium\nEstimated hours: 180",
+          "[Project: Automated loan origination platform with credit scoring and e-signature]\n[Client sector: finance | Year: 2024 | Main tech: python_django]\n\nComponent: Credit scoring engine\nDescription: Rules-and-model based credit scoring service that ingests bureau data and bank statements, returning a risk band and recommended limit with full explainability logs.\nTech stack: python_django, celery, postgresql\nComplexity: high\nEstimated hours: 200",
+          "[Project: Clinical trial data capture and anonymization platform]\n[Client sector: healthcare | Year: 2024 | Main tech: python_fastapi]\n\nComponent: Regulatory dataset export\nDescription: CDISC-aligned dataset export for regulatory submission with reproducible builds and a manifest of transformations.\nTech stack: python_fastapi, pandas\nComplexity: low\nEstimated hours: 80",
+          "[Project: Clinical trial data capture and anonymization platform]\n[Client sector: healthcare | Year: 2024 | Main tech: python_fastapi]\n\nComponent: Electronic data capture forms\nDescription: Configurable eCRF builder with validation rules, query management and per-site access control for trial data entry.\nTech stack: python_fastapi, postgresql\nComplexity: high\nEstimated hours: 180"
+        ],
+        "ground_truth": "Reference estimate for this project, in hours, derived from the historical budgets:\n- OAuth 2.0 authentication backend: 120 hours (BUD-2024-001::AUTH-001)\n- PSD2 open banking connectors: 160 hours (BUD-2024-001::PSD2-002)\n- Regulatory reporting export: 60 hours (BUD-2024-002::REPORT-004)\n- E-signature integration: 80 hours (BUD-2024-002::SIGN-003)\nTotal: 420 hours."
+      }
+    },
+    {
+      "query_id": "q3-remote-care",
+      "status": "ok",
+      "error": null,
+      "dangling_chunk_ids": [],
+      "citation_report": {
+        "total_lines": 5,
+        "grounded_lines": 5,
+        "dangling_lines": 0,
+        "insufficient_lines": 0,
+        "dangling_chunk_ids": [],
+        "lines": [
+          {
+            "component": "Care team dashboard",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-010::CARE-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Clinical alerting engine",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-010::ALERT-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Wearable data ingestion",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-010::INGEST-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "FHIR integration layer",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-009::FHIR-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Telemedicine video sessions",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-009::VIDEO-003"
+            ],
+            "dangling_chunk_ids": []
+          }
+        ]
+      },
+      "sample": {
+        "query_id": "q3-remote-care",
+        "question": "Remote care platform that ingests data from patients' wearable devices, alerts the care team through a clinical dashboard and offers video consultations integrated with hospital records over HL7/FHIR.",
+        "answer": "- Care team dashboard: 150 hours. The estimated hours are derived from the budget source BUD-2024-010::CARE-003 which states `Estimated hours: 150`. Evidence: Estimated hours: 150\n- Clinical alerting engine: 150 hours. The estimated hours are derived from the budget source BUD-2024-010::ALERT-002 which states `Estimated hours: 150`. Evidence: Estimated hours: 150\n- Wearable data ingestion: 180 hours. The estimated hours are derived from the budget source BUD-2024-010::INGEST-001 which states `Estimated hours: 180`. Evidence: Estimated hours: 180\n- FHIR integration layer: 190 hours. The estimated hours are derived from the budget source BUD-2024-009::FHIR-001 which states `Estimated hours: 190`. Evidence: Estimated hours: 190\n- Telemedicine video sessions: 160 hours. The estimated hours are derived from the budget source BUD-2024-009::VIDEO-003 which states `Estimated hours: 160`. Evidence: Estimated hours: 160\nTotal: 830 hours.\nAssumptions:\n- The care team dashboard will closely align with the description and scope of the component in the historical budget.\n- The clinical alerting engine will be similar in complexity and requirements to past projects with high complexity.\n- The wearable data ingestion and FHIR integration layer have similar operational and technical demands as previous projects utilizing high complexity.\n- The telemedicine video sessions require features similar to previous video consultation platforms.\nConfidence: high",
+        "contexts": [
+          "[Project: Remote patient monitoring with wearable data ingestion and alerts]\n[Client sector: healthcare | Year: 2024 | Main tech: node]\n\nComponent: Care team dashboard\nDescription: Dashboard for clinicians to triage alerts, view patient trends and acknowledge interventions.\nTech stack: react, node\nComplexity: medium\nEstimated hours: 150",
+          "[Project: Remote patient monitoring with wearable data ingestion and alerts]\n[Client sector: healthcare | Year: 2024 | Main tech: node]\n\nComponent: Clinical alerting engine\nDescription: Threshold and trend-based alerting that escalates abnormal vitals to care teams with configurable rules per condition.\nTech stack: node, redis\nComplexity: high\nEstimated hours: 150",
+          "[Project: Remote patient monitoring with wearable data ingestion and alerts]\n[Client sector: healthcare | Year: 2024 | Main tech: node]\n\nComponent: Wearable data ingestion\nDescription: High-volume ingestion pipeline for heart-rate, SpO2 and activity streams from wearables, with deduplication and schema validation.\nTech stack: node, kafka, timescaledb\nComplexity: high\nEstimated hours: 180",
+          "[Project: Patient appointment and telemedicine platform with HL7/FHIR integration]\n[Client sector: healthcare | Year: 2024 | Main tech: python_django]\n\nComponent: FHIR integration layer\nDescription: HL7 FHIR R4 integration that maps internal patient and encounter records to the hospital EHR, with terminology mapping and audit logging.\nTech stack: python_django, postgresql\nComplexity: high\nEstimated hours: 190",
+          "[Project: Patient appointment and telemedicine platform with HL7/FHIR integration]\n[Client sector: healthcare | Year: 2024 | Main tech: python_django]\n\nComponent: Telemedicine video sessions\nDescription: WebRTC-based video consultation with waiting room, in-call notes and secure recording consent handling.\nTech stack: python_django, webrtc\nComplexity: high\nEstimated hours: 160",
+          "[Project: Clinical trial data capture and anonymization platform]\n[Client sector: healthcare | Year: 2024 | Main tech: python_fastapi]\n\nComponent: Electronic data capture forms\nDescription: Configurable eCRF builder with validation rules, query management and per-site access control for trial data entry.\nTech stack: python_fastapi, postgresql\nComplexity: high\nEstimated hours: 180",
+          "[Project: Patient appointment and telemedicine platform with HL7/FHIR integration]\n[Client sector: healthcare | Year: 2024 | Main tech: python_django]\n\nComponent: Consent and audit module\nDescription: GDPR-aligned consent capture and immutable access audit trail for protected health information.\nTech stack: python_django, postgresql\nComplexity: low\nEstimated hours: 60",
+          "[Project: Patient appointment and telemedicine platform with HL7/FHIR integration]\n[Client sector: healthcare | Year: 2024 | Main tech: python_django]\n\nComponent: Appointment scheduling\nDescription: Scheduling engine with clinician availability, resource booking, reminders and a waitlist for cancellations.\nTech stack: python_django, celery\nComplexity: medium\nEstimated hours: 150",
+          "[Project: Factory IoT telemetry and predictive maintenance system]\n[Client sector: industrial | Year: 2024 | Main tech: python_fastapi]\n\nComponent: SCADA dashboard integration\nDescription: Read-only integration with the plant SCADA system to overlay predictive alerts on existing operator dashboards.\nTech stack: python_fastapi\nComplexity: medium\nEstimated hours: 130",
+          "[Project: Robo-advisor portfolio rebalancing platform]\n[Client sector: finance | Year: 2024 | Main tech: python_fastapi]\n\nComponent: Market data ingestion\nDescription: Scheduled ingestion of end-of-day prices and corporate actions from a market data vendor with caching and gap detection.\nTech stack: python_fastapi, redis\nComplexity: medium\nEstimated hours: 100"
+        ],
+        "ground_truth": "Reference estimate for this project, in hours, derived from the historical budgets:\n- Wearable data ingestion: 180 hours (BUD-2024-010::INGEST-001)\n- Clinical alerting engine: 150 hours (BUD-2024-010::ALERT-002)\n- Care team dashboard: 150 hours (BUD-2024-010::CARE-003)\n- Telemedicine video sessions: 160 hours (BUD-2024-009::VIDEO-003)\n- FHIR integration layer: 190 hours (BUD-2024-009::FHIR-001)\nTotal: 830 hours."
+      }
+    },
+    {
+      "query_id": "q4-industrial-data",
+      "status": "ok",
+      "error": null,
+      "dangling_chunk_ids": [],
+      "citation_report": {
+        "total_lines": 8,
+        "grounded_lines": 8,
+        "dangling_lines": 0,
+        "insufficient_lines": 0,
+        "dangling_chunk_ids": [],
+        "lines": [
+          {
+            "component": "SCADA dashboard integration",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-013::SCADA-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Predictive maintenance models",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-013::PRED-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Sensor telemetry ingestion",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-013::TELE-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Load forecasting service",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-015::FORECAST-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Smart meter data pipeline",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-015::METER-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Wearable data ingestion",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-010::INGEST-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Real-time inventory sync",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-007::INV-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Care team dashboard",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-010::CARE-003"
+            ],
+            "dangling_chunk_ids": []
+          }
+        ]
+      },
+      "sample": {
+        "query_id": "q4-industrial-data",
+        "question": "Real-time sensor data pipeline for plants and utilities, with load forecasting and predictive maintenance models and an operations dashboard on top.",
+        "answer": "- SCADA dashboard integration: 130 hours. Estimated hours taken directly from the source. Evidence: Estimated hours: 130\n- Predictive maintenance models: 200 hours. Estimated hours taken directly from the source. Evidence: Estimated hours: 200\n- Sensor telemetry ingestion: 170 hours. Estimated hours taken directly from the source. Evidence: Estimated hours: 170\n- Load forecasting service: 140 hours. Estimated hours taken directly from the source. Evidence: Estimated hours: 140\n- Smart meter data pipeline: 200 hours. Estimated hours taken directly from the source. Evidence: Estimated hours: 200\n- Wearable data ingestion: 180 hours. Estimated hours taken directly from the source. Evidence: Estimated hours: 180\n- Real-time inventory sync: 120 hours. Estimated hours taken directly from the source. Evidence: Estimated hours: 120\n- Care team dashboard: 150 hours. Estimated hours taken directly from the source. Evidence: Estimated hours: 150\nTotal: 1290 hours.\nAssumptions:\n- The SCADA dashboard integration is the main interface for displaying predictive maintenance alerts.\n- Load forecasting is assumed to apply to the plant functionalities.\n- Predictive maintenance models include various algorithms for operational efficiency.\nConfidence: high",
+        "contexts": [
+          "[Project: Factory IoT telemetry and predictive maintenance system]\n[Client sector: industrial | Year: 2024 | Main tech: python_fastapi]\n\nComponent: SCADA dashboard integration\nDescription: Read-only integration with the plant SCADA system to overlay predictive alerts on existing operator dashboards.\nTech stack: python_fastapi\nComplexity: medium\nEstimated hours: 130",
+          "[Project: Factory IoT telemetry and predictive maintenance system]\n[Client sector: industrial | Year: 2024 | Main tech: python_fastapi]\n\nComponent: Predictive maintenance models\nDescription: Anomaly detection and remaining-useful-life models that flag machines at risk of failure and schedule maintenance windows.\nTech stack: python_fastapi, scikit_learn\nComplexity: high\nEstimated hours: 200",
+          "[Project: Factory IoT telemetry and predictive maintenance system]\n[Client sector: industrial | Year: 2024 | Main tech: python_fastapi]\n\nComponent: Sensor telemetry ingestion\nDescription: MQTT-based ingestion of machine sensor telemetry into a time-series store, with edge buffering and out-of-order handling.\nTech stack: python_fastapi, mqtt, timescaledb\nComplexity: high\nEstimated hours: 170",
+          "[Project: Energy grid monitoring and demand-response platform]\n[Client sector: industrial | Year: 2024 | Main tech: java_spring]\n\nComponent: Load forecasting service\nDescription: Short-term load forecasting per substation feeding the demand-response scheduler.\nTech stack: java_spring\nComplexity: medium\nEstimated hours: 140",
+          "[Project: Energy grid monitoring and demand-response platform]\n[Client sector: industrial | Year: 2024 | Main tech: java_spring]\n\nComponent: Smart meter data pipeline\nDescription: Ingestion and validation of smart-meter interval data at scale, with gap filling and unit normalization.\nTech stack: java_spring, kafka, cassandra\nComplexity: high\nEstimated hours: 200",
+          "[Project: Remote patient monitoring with wearable data ingestion and alerts]\n[Client sector: healthcare | Year: 2024 | Main tech: node]\n\nComponent: Wearable data ingestion\nDescription: High-volume ingestion pipeline for heart-rate, SpO2 and activity streams from wearables, with deduplication and schema validation.\nTech stack: node, kafka, timescaledb\nComplexity: high\nEstimated hours: 180",
+          "[Project: Real-time payments gateway with fraud detection and reconciliation]\n[Client sector: finance | Year: 2023 | Main tech: java_spring]\n\nComponent: Real-time fraud detection\nDescription: Streaming fraud scoring on the authorization path using velocity rules and a gradient-boosted model served with sub-50ms latency.\nTech stack: java_spring, kafka, redis\nComplexity: high\nEstimated hours: 200",
+          "[Project: Grocery delivery app with slot booking and route optimization]\n[Client sector: ecommerce | Year: 2024 | Main tech: go]\n\nComponent: Real-time inventory sync\nDescription: Near-real-time inventory synchronization from store systems with out-of-stock substitution suggestions.\nTech stack: go, kafka\nComplexity: medium\nEstimated hours: 120",
+          "[Project: Real-time payments gateway with fraud detection and reconciliation]\n[Client sector: finance | Year: 2023 | Main tech: java_spring]\n\nComponent: Merchant dashboard\nDescription: Merchant-facing dashboard for transaction search, refunds and payout tracking.\nTech stack: react, java_spring\nComplexity: low\nEstimated hours: 60",
+          "[Project: Remote patient monitoring with wearable data ingestion and alerts]\n[Client sector: healthcare | Year: 2024 | Main tech: node]\n\nComponent: Care team dashboard\nDescription: Dashboard for clinicians to triage alerts, view patient trends and acknowledge interventions.\nTech stack: react, node\nComplexity: medium\nEstimated hours: 150"
+        ],
+        "ground_truth": "Reference estimate for this project, in hours, derived from the historical budgets:\n- Sensor telemetry ingestion for plants: 170 hours (BUD-2024-013::TELE-001)\n- Smart meter data pipeline for utilities: 200 hours (BUD-2024-015::METER-001)\n- Load forecasting service: 140 hours (BUD-2024-015::FORECAST-003)\n- Predictive maintenance models: 200 hours (BUD-2024-013::PRED-002)\n- SCADA dashboard integration for the operations dashboard: 130 hours (BUD-2024-013::SCADA-003)\nTotal: 840 hours."
+      }
+    },
+    {
+      "query_id": "q5-logistics",
+      "status": "ok",
+      "error": null,
+      "dangling_chunk_ids": [],
+      "citation_report": {
+        "total_lines": 4,
+        "grounded_lines": 4,
+        "dangling_lines": 0,
+        "insufficient_lines": 0,
+        "dangling_chunk_ids": [],
+        "lines": [
+          {
+            "component": "Route optimization service",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-007::ROUTE-002"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Real-time inventory sync",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-007::INV-003"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Delivery slot booking",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-007::SLOT-001"
+            ],
+            "dangling_chunk_ids": []
+          },
+          {
+            "component": "Yard and dock scheduling",
+            "status": "grounded",
+            "cited_chunk_ids": [
+              "BUD-2024-014::YARD-003"
+            ],
+            "dangling_chunk_ids": []
+          }
+        ]
+      },
+      "sample": {
+        "query_id": "q5-logistics",
+        "question": "Last-mile logistics software with route optimization for delivery vehicles, delivery slot booking for customers, real-time inventory sync and warehouse dock scheduling.",
+        "answer": "- Route optimization service: 180 hours. Estimated hours: 180 from BUD-2024-007::ROUTE-002, which perfectly aligns with the need for route optimization in the project description. Evidence: Estimated hours: 180\n- Real-time inventory sync: 120 hours. Estimated hours: 120 from BUD-2024-007::INV-003, which supports the need for real-time inventory synchronization in the project. Evidence: Estimated hours: 120\n- Delivery slot booking: 120 hours. Estimated hours: 120 from BUD-2024-007::SLOT-001, aligning with the delivery slot booking component mentioned in the project. Evidence: Estimated hours: 120\n- Yard and dock scheduling: 110 hours. Estimated hours: 110 from BUD-2024-014::YARD-003, which fits the requirement for warehouse dock scheduling. Evidence: Estimated hours: 110\nTotal: 530 hours.\nAssumptions:\n- The project components have similar complexities and tech stacks to those referenced in the historical sources.\n- The project requirements for last-mile logistics closely align with the functionalities provided by the sourced components.\nConfidence: high",
+        "contexts": [
+          "[Project: Grocery delivery app with slot booking and route optimization]\n[Client sector: ecommerce | Year: 2024 | Main tech: go]\n\nComponent: Route optimization service\nDescription: Vehicle routing optimization that batches orders into delivery runs minimizing distance under time-window and capacity constraints.\nTech stack: go\nComplexity: high\nEstimated hours: 180",
+          "[Project: Grocery delivery app with slot booking and route optimization]\n[Client sector: ecommerce | Year: 2024 | Main tech: go]\n\nComponent: Real-time inventory sync\nDescription: Near-real-time inventory synchronization from store systems with out-of-stock substitution suggestions.\nTech stack: go, kafka\nComplexity: medium\nEstimated hours: 120",
+          "[Project: Grocery delivery app with slot booking and route optimization]\n[Client sector: ecommerce | Year: 2024 | Main tech: go]\n\nComponent: Delivery slot booking\nDescription: Capacity-aware delivery slot service with optimistic locking to prevent overbooking and dynamic pricing for peak windows.\nTech stack: go, postgresql, redis\nComplexity: medium\nEstimated hours: 120",
+          "[Project: Warehouse management system with automated guided vehicle coordination]\n[Client sector: industrial | Year: 2023 | Main tech: go]\n\nComponent: Yard and dock scheduling\nDescription: Dock-door appointment scheduling and yard movement tracking to reduce trailer dwell time.\nTech stack: go, postgresql\nComplexity: medium\nEstimated hours: 110",
+          "[Project: Warehouse management system with automated guided vehicle coordination]\n[Client sector: industrial | Year: 2023 | Main tech: go]\n\nComponent: Warehouse management core\nDescription: Inventory, putaway and picking management with wave planning and barcode/RFID scanning support.\nTech stack: go, postgresql\nComplexity: high\nEstimated hours: 220",
+          "[Project: Warehouse management system with automated guided vehicle coordination]\n[Client sector: industrial | Year: 2023 | Main tech: go]\n\nComponent: AGV coordination service\nDescription: Coordination service that assigns tasks to automated guided vehicles, manages traffic on shared aisles and recovers from stalls.\nTech stack: go, grpc\nComplexity: high\nEstimated hours: 240",
+          "[Project: Pharmacy inventory and prescription fulfillment system]\n[Client sector: healthcare | Year: 2023 | Main tech: java_spring]\n\nComponent: Inventory and reorder\nDescription: Lot-and-expiry-aware inventory with automatic reorder points and supplier purchase orders.\nTech stack: java_spring, postgresql\nComplexity: medium\nEstimated hours: 140",
+          "[Project: Warehouse management system with automated guided vehicle coordination]\n[Client sector: industrial | Year: 2023 | Main tech: go]\n\nComponent: Operations KPI reporting\nDescription: Throughput, accuracy and utilization reporting with shift-level rollups.\nTech stack: go\nComplexity: low\nEstimated hours: 50",
+          "[Project: Patient appointment and telemedicine platform with HL7/FHIR integration]\n[Client sector: healthcare | Year: 2024 | Main tech: python_django]\n\nComponent: Appointment scheduling\nDescription: Scheduling engine with clinician availability, resource booking, reminders and a waitlist for cancellations.\nTech stack: python_django, celery\nComplexity: medium\nEstimated hours: 150",
+          "[Project: Multi-vendor marketplace with vendor payouts and dispute handling]\n[Client sector: ecommerce | Year: 2023 | Main tech: ruby_on_rails]\n\nComponent: Split order management\nDescription: Order splitting across vendors, per-vendor fulfillment state machines and customer-facing consolidated order tracking.\nTech stack: ruby_on_rails, sidekiq, postgresql\nComplexity: high\nEstimated hours: 170"
+        ],
+        "ground_truth": "Reference estimate for this project, in hours, derived from the historical budgets:\n- Route optimization service: 180 hours (BUD-2024-007::ROUTE-002)\n- Delivery slot booking: 120 hours (BUD-2024-007::SLOT-001)\n- Real-time inventory sync: 120 hours (BUD-2024-007::INV-003)\n- Yard and dock scheduling: 110 hours (BUD-2024-014::YARD-003)\nTotal: 530 hours."
+      }
+    }
+  ]
+}
